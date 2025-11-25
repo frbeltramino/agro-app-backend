@@ -40,3 +40,14 @@ app.use('/api/task/types', taskTypesRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// Manejo de señales para cerrar el servidor correctamente
+process.on('SIGINT', () => {
+  console.log('SIGINT received, closing server');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, closing server');
+  process.exit(0);
+});
