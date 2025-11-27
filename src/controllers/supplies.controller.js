@@ -170,45 +170,83 @@ export const createOrUpdateSupply = async (req, res) => {
       status,
     } = req.body;
 
+    // Validaciones mínimas
     if (!crop_id || !name || !category_id) {
       return res.status(400).json({
         message: "'crop_id', 'name' y 'category_id' son obligatorios",
       });
     }
 
+    const finalUnit = unit || "kg";
+    const finalDose = dose_per_ha ? Number(dose_per_ha) : 0;
+    const finalHectares = hectares ? Number(hectares) : 0;
+    const finalPrice = price_per_unit ? Number(price_per_unit) : 0;
+    const finalStatus = status || "active";
+
     let supplyId = id;
 
+    // Si viene id → UPDATE
     if (id) {
-      // Actualizar
       await pool.query(
-        `UPDATE supplies 
-         SET crop_id = ?, name = ?, category_id = ?, unit = ?, dose_per_ha = ?, hectares = ?, price_per_unit = ?, status = ?
-         WHERE id = ?`,
-        [crop_id, name, category_id, unit || 'kg', dose_per_ha || null, hectares || null, price_per_unit || null, status || 'active', id]
+        `
+        UPDATE supplies 
+        SET crop_id = ?, name = ?, category_id = ?, unit = ?, 
+            dose_per_ha = ?, hectares = ?, price_per_unit = ?, status = ?
+        WHERE id = ?
+        `,
+        [
+          crop_id,
+          name,
+          category_id,
+          finalUnit,
+          finalDose,
+          finalHectares,
+          finalPrice,
+          finalStatus,
+          id,
+        ]
       );
     } else {
-      // Crear
+      // Si NO viene id → CREATE
       const [result] = await pool.query(
-        `INSERT INTO supplies (crop_id, name, category_id, unit, dose_per_ha, hectares, price_per_unit, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [crop_id, name, category_id, unit || 'kg', dose_per_ha || null, hectares || null, price_per_unit || null, status || 'active']
+        `
+        INSERT INTO supplies (crop_id, name, category_id, unit, dose_per_ha, hectares, price_per_unit, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          crop_id,
+          name,
+          category_id,
+          finalUnit,
+          finalDose,
+          finalHectares,
+          finalPrice,
+          finalStatus,
+        ]
       );
+
       supplyId = result.insertId;
 
-      // ⚡ Crear registro en crop_supplies automáticamente
+      // 💡 Calcular cantidad real usada: dosis x hectáreas
+      const quantity = finalDose * finalHectares;
+
       await pool.query(
-        `INSERT INTO crop_supplies (crop_id, supply_id, quantity)
-         VALUES (?, ?, ?)`,
-        [crop_id, supplyId, 0] // cantidad inicial 0
+        `
+        INSERT INTO crop_supplies (crop_id, supply_id, quantity)
+        VALUES (?, ?, ?)
+        `,
+        [crop_id, supplyId, quantity]
       );
     }
 
-    // Obtener el registro final con categoría
+    // Obtener registro final
     const [rows] = await pool.query(
-      `SELECT s.*, sc.name AS category_name
-       FROM supplies s
-       LEFT JOIN supply_category sc ON s.category_id = sc.id
-       WHERE s.id = ?`,
+      `
+      SELECT s.*, sc.name AS category_name
+      FROM supplies s
+      LEFT JOIN supply_category sc ON s.category_id = sc.id
+      WHERE s.id = ?
+      `,
       [supplyId]
     );
 
@@ -218,6 +256,7 @@ export const createOrUpdateSupply = async (req, res) => {
     res.status(500).json({ message: "Error al crear o actualizar insumo" });
   }
 };
+
 
 // =========================
 // ELIMINAR INSUMO (lógica)
