@@ -1,10 +1,10 @@
 import express from "express";
 import {
-  createStock,
+  createOrUpdateStock,
   getStock,
   getStockById,
-  updateStock,
-  adjustStockQuantity
+  adjustStockQuantity,
+  deleteStock
 } from "../controllers/stock.controller.js";
 import { authorizeRoles, validateJWT } from "../middlewares/auth.middleware.js";
 
@@ -14,20 +14,25 @@ const router = express.Router();
 router.post("/new",
   validateJWT,
   authorizeRoles("admin"),
-  createStock);
+  createOrUpdateStock);
 
 router.get("/", getStock);
 
 router.get("/:id", getStockById);
 
-router.put("/:id",
+router.patch("/:id",
   validateJWT,
   authorizeRoles("admin"),
-  updateStock);
+  createOrUpdateStock);
 
 router.patch("/:id/adjust",
   validateJWT,
   authorizeRoles("admin"),
   adjustStockQuantity);
+
+router.delete("/:id",
+  validateJWT,
+  authorizeRoles("admin"),
+  deleteStock);
 
 export default router;
