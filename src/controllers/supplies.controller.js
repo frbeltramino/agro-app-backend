@@ -1,8 +1,5 @@
 import { pool } from "../db/connection.js";
 
-// =========================
-// OBTENER TODOS LOS INSUMOS
-// =========================
 export const getSupplies = async (req, res) => {
   try {
     const [rows] = await pool.query(`
@@ -19,9 +16,6 @@ export const getSupplies = async (req, res) => {
   }
 };
 
-// =========================
-// OBTENER INSUMO POR ID
-// =========================
 export const getSupplyById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -41,9 +35,6 @@ export const getSupplyById = async (req, res) => {
   }
 };
 
-// =========================
-// OBTENER INSUMOS POR CROP
-// =========================
 
 
 export const getSuppliesByCropId = async (req, res) => {
@@ -82,8 +73,8 @@ FROM (
     s.unit AS supply_unit,
     s.price_per_unit AS unit_price,
     cs.quantity AS total_used,
-    s.dose_per_ha AS dose_per_ha,     -- <── AHORA SE TRAE DE SUPPLIES
-    s.hectares AS hectares,           -- <── AHORA SE TRAE DE SUPPLIES
+    s.dose_per_ha AS dose_per_ha,    
+    s.hectares AS hectares,          
     FALSE AS from_stock
   FROM crop_supplies cs
   INNER JOIN supplies s ON cs.supply_id = s.id
@@ -153,9 +144,7 @@ LIMIT ? OFFSET ?
 };
 
 
-// =========================
-// CREAR INSUMO
-// =========================
+
 export const createOrUpdateSupply = async (req, res) => {
   try {
     const {
@@ -258,18 +247,14 @@ export const createOrUpdateSupply = async (req, res) => {
 };
 
 
-// =========================
-// ELIMINAR INSUMO (lógica)
-// =========================
 export const deleteSupply = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Eliminación lógica
+
     await pool.query(`UPDATE supplies SET status = 'inactive' WHERE id = ?`, [id]);
 
-    // Si prefieres eliminación física:
-    // await pool.query(`DELETE FROM supplies WHERE id = ?`, [id]);
+
 
     res.json({ message: "Insumo eliminado correctamente" });
   } catch (err) {
