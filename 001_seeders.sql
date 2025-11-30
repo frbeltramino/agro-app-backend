@@ -135,3 +135,13 @@ VALUES
 INSERT INTO users (name, email, password, roles, status)
 VALUES
 ('Test User', 'testuser@mail.com', '$2b$10$FSdBHx5uV.NTUJeIjyCcGee4LcXwjmwA8ltJfegLl84qPNbBa7qEy', JSON_ARRAY('admin'), 'active');
+
+
+INSERT INTO seed_sales
+(
+    waybill_number, sale_date, destination, kg_delivered, kg_sold, status
+)
+VALUES
+(
+    'CP-001', '2025-11-28', 'Cliente XYZ', 100.50, 80.25, 'pending'              
+);
