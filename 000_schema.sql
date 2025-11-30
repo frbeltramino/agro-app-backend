@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS supply_category;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS lot_master;
 DROP TABLE IF EXISTS task_types;
+DROP TABLE IF EXISTS seed_sales;
 
 -- ============================================================
 -- TABLAS DE USUARIOS
@@ -233,6 +234,38 @@ CREATE TABLE lot_master (
   name VARCHAR(150) NOT NULL UNIQUE,
   default_surface DECIMAL(10,2)
 );
+
+CREATE TABLE `seed_sales` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+
+  `waybill_number` VARCHAR(50) NOT NULL COMMENT 'Carta de porte',
+  `sale_date` DATE NOT NULL COMMENT 'Fecha de la operación',
+  `destination` VARCHAR(150) NOT NULL COMMENT 'Destino / cliente',
+
+  `kg_delivered` DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Kg entregados',
+  `kg_sold` DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Kg vendidos',
+
+  `status` ENUM('pending','partial','completed','canceled')
+      NOT NULL DEFAULT 'pending' COMMENT 'Estado del movimiento',
+
+  -- Soft delete (opcional pero recomendado)
+  `deleted_at` DATETIME NULL DEFAULT NULL COMMENT 'Fecha de eliminación lógica',
+
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+
+  -- Índices útiles para filtros
+  INDEX `idx_waybill_number` (`waybill_number`),
+  INDEX `idx_destination` (`destination`),
+  INDEX `idx_sale_date` (`sale_date`),
+  INDEX `idx_status` (`status`)
+)
+ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_0900_ai_ci;
+
 
 -- ============================================================
 -- ÍNDICES
