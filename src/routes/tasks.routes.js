@@ -16,7 +16,7 @@ router.patch("/:id",
   validateJWT,
   authorizeRoles("admin"),
   createOrUpdateTask);
-router.delete("/:id",
+router.delete("/crop/:cropId/:id",
   validateJWT,
   authorizeRoles("admin"),
   deleteTask);

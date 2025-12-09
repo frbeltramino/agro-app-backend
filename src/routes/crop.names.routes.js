@@ -10,7 +10,7 @@ import { authorizeRoles, validateJWT } from "../middlewares/auth.middleware.js";
 const router = Router();
 
 router.get("/", getCropNames);
-router.post("/",
+router.post("/new",
   validateJWT,
   authorizeRoles("admin"),
   createCropName);
