@@ -44,7 +44,7 @@ export const getTasksByCropId = async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     // --- FILTROS DINÁMICOS ---
-    const filters = ["t.crop_id = ?"];
+    const filters = ["t.crop_id = ?", "t.status = 'active'"];
     const params = [cropId];
 
     // FILTRAR POR ID DEL TIPO DE TAREA
@@ -183,25 +183,29 @@ export const createOrUpdateTask = async (req, res) => {
 
     await connection.beginTransaction();
 
-    // Calcular total_price
+    // ===============================
+    // 1) Calcular total_price
+    // ===============================
     let total_price = 0;
+
     for (const s of supplies) {
       const total_used = s.dose_per_ha * s.hectares;
 
+      let priceRow;
       if (s.supply_id) {
-        const [rows] = await connection.query(
+        [[priceRow]] = await connection.query(
           "SELECT price_per_unit FROM supplies WHERE id = ?",
           [s.supply_id]
         );
-        total_price += rows[0]?.price_per_unit * total_used || 0;
-      }
-
-      if (s.stock_id) {
-        const [rows] = await connection.query(
+      } else if (s.stock_id) {
+        [[priceRow]] = await connection.query(
           "SELECT price_per_unit FROM stock WHERE id = ?",
           [s.stock_id]
         );
-        total_price += rows[0]?.price_per_unit * total_used || 0;
+      }
+
+      if (priceRow) {
+        total_price += priceRow.price_per_unit * total_used;
       }
     }
 
@@ -209,8 +213,10 @@ export const createOrUpdateTask = async (req, res) => {
 
     let taskId;
 
+    // ===============================
+    // 2) UPDATE
+    // ===============================
     if (id) {
-      // === UPDATE ===
       await connection.query(
         `UPDATE tasks 
          SET task_type_id = ?, description = ?, provider = ?, total_price = ?, laborCost = ?, date = ?
@@ -228,22 +234,24 @@ export const createOrUpdateTask = async (req, res) => {
 
       taskId = id;
 
-      // Limpiar los supplies previos
       await connection.query(`DELETE FROM task_supplies WHERE task_id = ?`, [
         taskId,
       ]);
 
-      // Actualizar crop_tasks
       await connection.query(
         `UPDATE crop_tasks 
          SET performed_at = ?, note = ? 
          WHERE task_id = ?`,
         [performed_at, note || null, taskId]
       );
+
+      // ===============================
+      // 3) CREATE
+      // ===============================
     } else {
-      // === CREATE ===
       const [taskResult] = await connection.query(
-        `INSERT INTO tasks (crop_id, task_type_id, description, provider, total_price, laborCost, date)
+        `INSERT INTO tasks 
+          (crop_id, task_type_id, description, provider, total_price, laborCost, date)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           crop_id,
@@ -265,13 +273,16 @@ export const createOrUpdateTask = async (req, res) => {
       );
     }
 
-    // Insertar task_supplies
+    // ===============================
+    // 4) Insertar task_supplies
+    // ===============================
     for (const s of supplies) {
       const total_used = s.dose_per_ha * s.hectares;
 
       await connection.query(
-        `INSERT INTO task_supplies (task_id, supply_id, stock_id, dose_per_ha, hectares, total_used)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO task_supplies 
+      (task_id, supply_id, stock_id, dose_per_ha, hectares, total_used, price_per_unit)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           taskId,
           s.supply_id || null,
@@ -279,10 +290,15 @@ export const createOrUpdateTask = async (req, res) => {
           s.dose_per_ha,
           s.hectares,
           total_used,
+          s.price_per_unit || null, // ✅ usar el dato enviado desde el front
         ]
       );
     }
 
+
+    // ===============================
+    // 5) COMMIT
+    // ===============================
     await connection.commit();
 
     res.json({
@@ -293,33 +309,71 @@ export const createOrUpdateTask = async (req, res) => {
       total_price,
       laborCost,
     });
+
   } catch (err) {
     await connection.rollback();
     console.error("Error en createOrUpdateTask:", err);
-    res
-      .status(500)
-      .json({ message: err.message || "Error al crear/actualizar tarea" });
+    res.status(500).json({
+      message: err.message || "Error al crear/actualizar tarea",
+    });
   } finally {
     connection.release();
   }
 };
 
+
 // =========================
 // ELIMINAR TAREA (lógica o física)
 // =========================
 export const deleteTask = async (req, res) => {
+  const connection = await pool.getConnection();
+
   try {
-    const { id } = req.params;
+    const { cropId, id: taskId } = req.params;
 
-    // Eliminación lógica: cambiar status a 'inactive'
-    await pool.query(`UPDATE tasks SET status = 'inactive' WHERE id = ?`, [id]);
+    await connection.beginTransaction();
 
-    // Si prefieres eliminación física, usa:
-    // await pool.query(`DELETE FROM tasks WHERE id = ?`, [id]);
+    // 1️⃣ Validar que la tarea pertenece al cultivo (opcional pero recomendado)
+    const [[task]] = await connection.query(
+      `SELECT id FROM tasks WHERE id = ? AND crop_id = ? AND status = 'active'`,
+      [taskId, cropId]
+    );
+
+    if (!task) {
+      await connection.rollback();
+      return res.status(404).json({
+        message: "La tarea no existe o no pertenece a este cultivo"
+      });
+    }
+
+    // 2️⃣ Eliminar suministros asociados a la tarea
+    await connection.query(
+      `DELETE FROM task_supplies WHERE task_id = ?`,
+      [taskId]
+    );
+
+    // 3️⃣ Eliminar relación con cultivo
+    await connection.query(
+      `DELETE FROM crop_tasks WHERE task_id = ?`,
+      [taskId]
+    );
+
+    // 4️⃣ Borrado lógico de la tarea
+    await connection.query(
+      `UPDATE tasks SET status = 'inactive' WHERE id = ?`,
+      [taskId]
+    );
+
+    await connection.commit();
 
     res.json({ message: "Tarea eliminada correctamente" });
+
   } catch (err) {
-    console.error(err);
+    await connection.rollback();
+    console.error("Error en deleteTask:", err);
     res.status(500).json({ message: "Error al eliminar tarea" });
+  } finally {
+    connection.release();
   }
 };
+

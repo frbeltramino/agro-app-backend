@@ -4,7 +4,8 @@ import {
   getSupplyById,
   createOrUpdateSupply,
   deleteSupply,
-  getSuppliesByCropId
+  getSuppliesByCropId,
+  checkSupplyUsage
 } from "../controllers/supplies.controller.js";
 import { authorizeRoles, validateJWT } from "../middlewares/auth.middleware.js";
 
@@ -21,9 +22,18 @@ router.patch("/:id",
   validateJWT,
   authorizeRoles("admin"),
   createOrUpdateSupply);
-router.delete("/:id", validateJWT,
+router.delete(
+  "/delete",
+  validateJWT,
   authorizeRoles("admin"),
-  deleteSupply);
+  deleteSupply
+);
+
+router.post("/check-usage",
+  validateJWT,
+  authorizeRoles("admin"),
+  checkSupplyUsage
+);
 
 
 export default router;
