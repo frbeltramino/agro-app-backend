@@ -1,26 +1,31 @@
 -- ============================================================
--- DROP TABLAS (ORDEN CORRECTO)
+-- LIMPIAR BASE DE DATOS (DROP TABLAS EN ORDEN CORRECTO)
 -- ============================================================
 DROP TABLE IF EXISTS task_supplies;
-DROP TABLE IF EXISTS tasks;
-DROP TABLE IF EXISTS stock;
-DROP TABLE IF EXISTS supplies;
 DROP TABLE IF EXISTS crop_supplies;
 DROP TABLE IF EXISTS crop_tasks;
+DROP TABLE IF EXISTS crop_stock;
+
+DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS supplies;
+DROP TABLE IF EXISTS stock;
+
 DROP TABLE IF EXISTS crops;
 DROP TABLE IF EXISTS crop_name;
 DROP TABLE IF EXISTS lots;
 DROP TABLE IF EXISTS campaigns;
+
 DROP TABLE IF EXISTS supply_category;
 DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS lot_master;
 DROP TABLE IF EXISTS task_types;
+DROP TABLE IF EXISTS lot_master;
 DROP TABLE IF EXISTS seed_sales;
-DROP TABLE IF EXISTS crop_stock;
 
 -- ============================================================
--- TABLAS DE USUARIOS
+-- TABLAS BASE
 -- ============================================================
+
+-- USERS
 CREATE TABLE users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(150) NOT NULL,
@@ -32,9 +37,7 @@ CREATE TABLE users (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- ============================================================
--- CAMPOS BASE
--- ============================================================
+-- CAMPAIGNS
 CREATE TABLE campaigns (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(150) NOT NULL,
@@ -46,6 +49,7 @@ CREATE TABLE campaigns (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- LOTS
 CREATE TABLE lots (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(120) NOT NULL,
@@ -61,17 +65,13 @@ CREATE TABLE lots (
     REFERENCES campaigns(id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
--- ============================================================
--- NOMBRES DE CULTIVOS
--- ============================================================
+-- CROP NAMES
 CREATE TABLE crop_name (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(50) NOT NULL UNIQUE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ============================================================
 -- CROPS
--- ============================================================
 CREATE TABLE crops (
   id INT AUTO_INCREMENT PRIMARY KEY,
   crop_name_id INT NOT NULL,
@@ -94,18 +94,14 @@ CREATE TABLE crops (
     REFERENCES crop_name(id) ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
--- ============================================================
--- CATEGORÍAS DE SUMINISTROS
--- ============================================================
+-- SUPPLY CATEGORY
 CREATE TABLE supply_category (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ============================================================
--- SUMINISTROS ASOCIADOS A CULTIVO
--- ============================================================
+-- SUPPLIES
 CREATE TABLE supplies (
   id INT AUTO_INCREMENT PRIMARY KEY,
   crop_id INT NOT NULL,
@@ -124,9 +120,7 @@ CREATE TABLE supplies (
     REFERENCES supply_category(id) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
--- ============================================================
--- STOCK GENERAL
--- ============================================================
+-- STOCK
 CREATE TABLE stock (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(150) NOT NULL,
@@ -142,44 +136,31 @@ CREATE TABLE stock (
     REFERENCES supply_category(id) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
--- ============================================================
--- TABLA DE TIPOS DE TAREAS
--- ============================================================
+-- TASK TYPES
 CREATE TABLE task_types (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(150) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ============================================================
 -- TASKS
--- ============================================================
-CREATE TABLE `tasks` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `crop_id` INT NOT NULL,
-  `task_type_id` INT NOT NULL,
-  `description` TEXT NULL DEFAULT NULL COLLATE 'utf8mb4_0900_ai_ci',
-  `provider` VARCHAR(150) NULL DEFAULT NULL COLLATE 'utf8mb4_0900_ai_ci',
-  `total_price` DECIMAL(10,2) NULL DEFAULT NULL,
-  `laborCost` DECIMAL(10,2) NOT NULL DEFAULT 0,  -- nueva columna
-  `date` DATE NOT NULL,
-  `note` TEXT NULL DEFAULT NULL COLLATE 'utf8mb4_0900_ai_ci',
-  `status` ENUM('active','inactive') NOT NULL DEFAULT 'active' COLLATE 'utf8mb4_0900_ai_ci',
-  `created_at` TIMESTAMP NULL DEFAULT (CURRENT_TIMESTAMP),
-  `updated_at` TIMESTAMP NULL DEFAULT (CURRENT_TIMESTAMP) ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`) USING BTREE,
-  INDEX `fk_task_crop` (`crop_id`) USING BTREE,
-  INDEX `fk_task_type` (`task_type_id`) USING BTREE,
-  CONSTRAINT `fk_task_crop` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`) ON UPDATE CASCADE ON DELETE CASCADE,
-  CONSTRAINT `fk_task_type` FOREIGN KEY (`task_type_id`) REFERENCES `task_types` (`id`) ON UPDATE CASCADE ON DELETE RESTRICT
-)
-COLLATE='utf8mb4_0900_ai_ci'
-ENGINE=InnoDB
-AUTO_INCREMENT=1;
+CREATE TABLE tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  crop_id INT NOT NULL,
+  task_type_id INT NOT NULL,
+  description TEXT NULL,
+  provider VARCHAR(150) NULL,
+  total_price DECIMAL(10,2) NULL,
+  laborCost DECIMAL(10,2) NOT NULL DEFAULT 0,
+  date DATE NOT NULL,
+  note TEXT NULL,
+  status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_task_crop FOREIGN KEY (crop_id) REFERENCES crops(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_task_type FOREIGN KEY (task_type_id) REFERENCES task_types(id) ON DELETE RESTRICT ON UPDATE CASCADE
+);
 
-
--- ============================================================
 -- TASK SUPPLIES
--- ============================================================
 CREATE TABLE task_supplies (
   id INT AUTO_INCREMENT PRIMARY KEY,
   task_id INT NOT NULL,
@@ -198,9 +179,7 @@ CREATE TABLE task_supplies (
     REFERENCES stock(id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
--- ============================================================
--- TABLAS INTERMEDIAS
--- ============================================================
+-- INTERMEDIAS
 CREATE TABLE crop_tasks (
   id INT AUTO_INCREMENT PRIMARY KEY,
   crop_id INT NOT NULL,
@@ -227,45 +206,29 @@ CREATE TABLE crop_supplies (
     REFERENCES supplies(id) ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
--- ============================================================
 -- LOT MASTER
--- ============================================================
 CREATE TABLE lot_master (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(150) NOT NULL UNIQUE,
   default_surface DECIMAL(10,2)
 );
 
-CREATE TABLE `seed_sales` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-
-  `waybill_number` VARCHAR(50) NOT NULL COMMENT 'Carta de porte',
-  `sale_date` DATE NOT NULL COMMENT 'Fecha de la operación',
-  `destination` VARCHAR(150) NOT NULL COMMENT 'Destino / cliente',
-
-  `kg_delivered` DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Kg entregados',
-  `kg_sold` DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'Kg vendidos',
-
-  `status` ENUM('pending','partial','completed','canceled')
-      NOT NULL DEFAULT 'pending' COMMENT 'Estado del movimiento',
-
-  -- Soft delete (opcional pero recomendado)
-  `deleted_at` DATETIME NULL DEFAULT NULL COMMENT 'Fecha de eliminación lógica',
-
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-  PRIMARY KEY (`id`),
-
-  -- Índices útiles para filtros
-  INDEX `idx_waybill_number` (`waybill_number`),
-  INDEX `idx_destination` (`destination`),
-  INDEX `idx_sale_date` (`sale_date`),
-  INDEX `idx_status` (`status`)
-)
-ENGINE=InnoDB
-DEFAULT CHARSET=utf8mb4
-COLLATE=utf8mb4_0900_ai_ci;
+CREATE TABLE seed_sales (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  waybill_number VARCHAR(50) NOT NULL,
+  sale_date DATE NOT NULL,
+  destination VARCHAR(150) NOT NULL,
+  kg_delivered DECIMAL(10,2) NOT NULL DEFAULT 0,
+  kg_sold DECIMAL(10,2) NOT NULL DEFAULT 0,
+  status ENUM('pending','partial','completed','canceled') NOT NULL DEFAULT 'pending',
+  deleted_at DATETIME NULL DEFAULT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_waybill_number (waybill_number),
+  INDEX idx_destination (destination),
+  INDEX idx_sale_date (sale_date),
+  INDEX idx_status (status)
+);
 
 CREATE TABLE crop_stock (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -287,9 +250,11 @@ CREATE TABLE crop_stock (
   hectares DECIMAL(10,2),
   status ENUM('active','inactive') NOT NULL DEFAULT 'active',
 
+  -- TIMESTAMPS
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+  -- FOREIGN KEYS
   CONSTRAINT fk_cropstock_crop FOREIGN KEY (crop_id)
     REFERENCES crops(id) ON DELETE CASCADE ON UPDATE CASCADE,
 
@@ -300,8 +265,3 @@ CREATE TABLE crop_stock (
     REFERENCES supply_category(id) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
--- ============================================================
--- ÍNDICES
--- ============================================================
-CREATE INDEX idx_campaign_start ON campaigns(start_date);
-CREATE INDEX idx_crop_dates ON crops(start_date, end_date);

@@ -11,11 +11,12 @@ export const getCampaigns = async (req, res) => {
     const limit = 10;
     const offset = (page - 1) * limit;
 
-    let whereClause = "";
+    // --- WHERE DINÁMICO ---
+    let whereClause = "WHERE c.status = 'active'"; // 👈 SIEMPRE ACTIVAS
     const params = [];
 
     if (search) {
-      whereClause = "WHERE c.name LIKE ?";
+      whereClause += " AND c.name LIKE ?";
       params.push(`%${search}%`);
     }
 
@@ -84,6 +85,7 @@ export const getCampaigns = async (req, res) => {
     res.status(500).json({ message: "Error al obtener campañas" });
   }
 };
+
 
 export const getCampaignById = async (req, res) => {
   try {
