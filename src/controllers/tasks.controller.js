@@ -177,7 +177,7 @@ export const createOrUpdateTask = async (req, res) => {
       supplies = [],
     } = req.body;
 
-    if (!crop_id || !task_type_id || !description || !performed_at) {
+    if (!crop_id || !task_type_id || !performed_at) {
       return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
 
