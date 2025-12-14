@@ -46,140 +46,99 @@ export const getSuppliesByCropId = async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     const filters = [];
-    const params = [cropId, cropId, cropId];
+    const params = [cropId];
 
     if (name) {
-      filters.push("supply_name LIKE ?");
+      filters.push("(COALESCE(s.name, st.name) LIKE ?)");
       params.push(`%${name}%`);
     }
+
     if (category) {
-      filters.push("category_name LIKE ?");
+      filters.push("sc.name LIKE ?");
       params.push(`%${category}%`);
     }
 
-    const filterSql = filters.length ? " WHERE " + filters.join(" AND ") : "";
+    const filterSql = filters.length ? "AND " + filters.join(" AND ") : "";
 
-    // Consulta principal con record_id unificado
+    /* =========================
+       QUERY PRINCIPAL
+    ========================= */
     const [rows] = await pool.query(
       `
-      SELECT *
-      FROM (
-        -- 1) Insumos propios del cultivo
-        SELECT
-            NULL AS crop_stock_id,
-            cs.id AS crop_supply_id,
-            s.id AS supply_id,
-            NULL AS stock_id,
-            s.name AS supply_name,
-            sc.name AS category_name,
-            s.unit AS supply_unit,
-            s.price_per_unit AS unit_price,
-            cs.quantity AS total_used,
-            s.dose_per_ha AS dose_per_ha,
-            s.hectares AS hectares,
-            FALSE AS from_stock,
-            cs.created_at AS used_at
-        FROM crop_supplies cs
-        INNER JOIN supplies s ON cs.supply_id = s.id
-        LEFT JOIN supply_category sc ON s.category_id = sc.id
-        WHERE cs.crop_id = ? AND s.status = 'active'
+      SELECT
+        ct.task_id,
+        ts.id AS task_supply_id,
+        ts.dose_per_ha,
+        ts.hectares,
+        ts.total_used,
+        ts.price_per_unit AS unit_price, -- ahora siempre se llama unit_price
+        ts.created_at AS used_at,
 
-        UNION ALL
+        -- supply (si viene de stock, se usa stock)
+        COALESCE(s.id, st.id) AS supply_id,
+        COALESCE(s.name, st.name) AS supply_name,
+        COALESCE(s.unit, st.unit) AS supply_unit,
 
-        -- 2) Insumos desde stock usados en tareas
-        SELECT
-            NULL AS crop_stock_id,
-            NULL AS crop_supply_id,
-            NULL AS supply_id,
-            st.id AS stock_id,
-            st.name AS supply_name,
-            sc.name AS category_name,
-            st.unit AS supply_unit,
-            st.price_per_unit AS unit_price,
-            ts.total_used AS total_used,
-            ts.dose_per_ha AS dose_per_ha,
-            ts.hectares AS hectares,
-            TRUE AS from_stock,
-            ts.created_at AS used_at
-        FROM task_supplies ts
-        INNER JOIN stock st ON ts.stock_id = st.id
-        LEFT JOIN supply_category sc ON st.category_id = sc.id
-        INNER JOIN tasks t ON ts.task_id = t.id
-        WHERE t.crop_id = ? AND st.status = 'active'
+        -- stock
+        st.id AS stock_id,
+        st.name AS stock_name,
+        st.unit AS stock_unit,
 
-        UNION ALL
+        -- category
+        COALESCE(s.category_id, st.category_id) AS category_id,
+        sc.name AS category_name,
 
-        -- 3) Stock usado directamente por el cultivo
-        SELECT
-            csu.id AS crop_stock_id,
-            NULL AS crop_supply_id,
-            NULL AS supply_id,
-            csu.stock_id AS stock_id,
-            st.name AS supply_name,
-            sc.name AS category_name,
-            csu.unit AS supply_unit,
-            csu.price_per_unit AS unit_price,
-            csu.used_quantity AS total_used,
-            csu.dose_per_ha AS dose_per_ha,
-            csu.hectares AS hectares,
-            TRUE AS from_stock,
-            csu.used_at AS used_at
-        FROM crop_stock csu
-        INNER JOIN stock st ON csu.stock_id = st.id
-        LEFT JOIN supply_category sc ON csu.category_id = sc.id
-        WHERE csu.crop_id = ? AND csu.status = 'active'
+        CASE
+          WHEN ts.stock_id IS NOT NULL THEN TRUE
+          ELSE FALSE
+        END AS from_stock
 
-      ) AS combined
+      FROM crop_tasks ct
+      INNER JOIN task_supplies ts ON ts.task_id = ct.task_id
+      LEFT JOIN supplies s ON ts.supply_id = s.id
+      LEFT JOIN stock st ON ts.stock_id = st.id
+      LEFT JOIN supply_category sc
+        ON sc.id = COALESCE(s.category_id, st.category_id)
+
+      WHERE ct.crop_id = ?
       ${filterSql}
-      ORDER BY used_at DESC, supply_name ASC
+
+      ORDER BY ts.created_at DESC
       LIMIT ? OFFSET ?
       `,
       [...params, limitNum, offset]
     );
 
-    // Conteo total para paginación
+    /* =========================
+       COUNT
+    ========================= */
     const [countRows] = await pool.query(
       `
       SELECT COUNT(*) AS total
-      FROM (
-          SELECT cs.id AS record_id
-          FROM crop_supplies cs
-          INNER JOIN supplies s ON cs.supply_id = s.id
-          WHERE cs.crop_id = ? AND s.status = 'active'
-
-          UNION ALL
-
-          SELECT ts.id AS record_id
-          FROM task_supplies ts
-          INNER JOIN tasks t ON ts.task_id = t.id
-          INNER JOIN stock st ON ts.stock_id = st.id
-          WHERE t.crop_id = ? AND st.status = 'active'
-
-          UNION ALL
-
-          SELECT csu.id AS record_id
-          FROM crop_stock csu
-          WHERE csu.crop_id = ? AND csu.status = 'active'
-      ) AS combined_count
+      FROM crop_tasks ct
+      INNER JOIN task_supplies ts ON ts.task_id = ct.task_id
+      WHERE ct.crop_id = ?
       `,
-      [cropId, cropId, cropId]
+      [cropId]
     );
 
     const total = countRows[0].total;
-    const totalPages = Math.ceil(total / limitNum);
 
     res.json({
       page: pageNum,
       limit: limitNum,
       total,
-      totalPages,
-      supplies: rows
+      totalPages: Math.ceil(total / limitNum),
+      supplies: rows,
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Error al obtener insumos del cultivo" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Error al obtener los suministros del cultivo",
+    });
   }
 };
+
 
 
 
