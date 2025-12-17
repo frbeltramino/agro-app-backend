@@ -1,10 +1,10 @@
 import express from "express";
-import { getCrops, getCropById, getCropsByLotId, createOrUpdateCrop, deleteCrop } from "../controllers/crops.controller.js";
+import { getCrops, getCropById, getCropsByLotId, createOrUpdateCrop, deleteCrop, getCropsNotInSale } from "../controllers/crops.controller.js";
 import { authorizeRoles, validateJWT } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/", getCrops);
+router.get("/", getCropsNotInSale);
 router.get("/:id", getCropById);
 router.get("/lot/:lotId", getCropsByLotId);
 router.post("/new",

@@ -20,6 +20,7 @@ DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS task_types;
 DROP TABLE IF EXISTS lot_master;
 DROP TABLE IF EXISTS seed_sales;
+DROP TABLE IF EXISTS seed_sale_deliveries;
 
 -- ============================================================
 -- TABLAS BASE
@@ -215,20 +216,38 @@ CREATE TABLE lot_master (
 
 CREATE TABLE seed_sales (
   id INT AUTO_INCREMENT PRIMARY KEY,
+
+  crop_id INT NOT NULL,
+
   waybill_number VARCHAR(50) NOT NULL,
   sale_date DATE NOT NULL,
   destination VARCHAR(150) NOT NULL,
+
   kg_delivered DECIMAL(10,2) NOT NULL DEFAULT 0,
   kg_sold DECIMAL(10,2) NOT NULL DEFAULT 0,
-  status ENUM('pending','partial','completed','canceled') NOT NULL DEFAULT 'pending',
+
+  status ENUM('pending','partial','completed','canceled')
+    NOT NULL DEFAULT 'pending',
+
   deleted_at DATETIME NULL DEFAULT NULL,
   created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+
+  INDEX idx_crop (crop_id),
   INDEX idx_waybill_number (waybill_number),
   INDEX idx_destination (destination),
   INDEX idx_sale_date (sale_date),
-  INDEX idx_status (status)
-);
+  INDEX idx_status (status),
+
+  CONSTRAINT fk_seed_sales_crop
+    FOREIGN KEY (crop_id)
+    REFERENCES crops(id)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT
+)
+ENGINE=InnoDB
+COLLATE='utf8mb4_0900_ai_ci';
 
 CREATE TABLE crop_stock (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -264,4 +283,59 @@ CREATE TABLE crop_stock (
   CONSTRAINT fk_cropstock_category FOREIGN KEY (category_id)
     REFERENCES supply_category(id) ON DELETE SET NULL ON UPDATE CASCADE
 );
+
+CREATE TABLE seed_sale_deliveries (
+  id INT NOT NULL AUTO_INCREMENT,
+
+  -- RELACIONES PRINCIPALES
+  seed_sale_id INT NOT NULL,
+  crop_id INT NOT NULL,
+
+  -- DETALLES DE LA ENTREGA
+  delivery_date DATE NOT NULL,
+  destination VARCHAR(150) NOT NULL,
+  kg_delivered DECIMAL(10,2) NOT NULL,
+  price_per_kg DECIMAL(10,2) NOT NULL,
+
+  -- TIMESTAMPS
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at DATETIME NULL DEFAULT NULL,
+
+  -- PRIMARY KEY
+  PRIMARY KEY (id),
+
+  -- INDICES
+  INDEX idx_seed_sale (seed_sale_id),
+  INDEX idx_crop (crop_id),
+  INDEX idx_delivery_date (delivery_date),
+
+  -- FOREIGN KEYS
+  CONSTRAINT fk_ssd_crop FOREIGN KEY (crop_id)
+    REFERENCES crops(id)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT,
+
+  CONSTRAINT fk_ssd_seed_sale FOREIGN KEY (seed_sale_id)
+    REFERENCES seed_sales(id)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_0900_ai_ci;
+
+
+
+ALTER TABLE seed_sales
+ADD COLUMN crop_id INT NOT NULL AFTER id;
+
+ALTER TABLE seed_sales
+ADD INDEX idx_crop (crop_id);
+
+ALTER TABLE seed_sales
+ADD CONSTRAINT fk_seed_sales_crop
+  FOREIGN KEY (crop_id)
+  REFERENCES crops(id)
+  ON UPDATE CASCADE
+  ON DELETE RESTRICT;
 

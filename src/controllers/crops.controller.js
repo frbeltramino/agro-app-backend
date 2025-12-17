@@ -3,15 +3,24 @@ import { pool } from "../db/connection.js";
 export const getCrops = async (req, res) => {
   try {
     const [rows] = await pool.query(`
-      SELECT cr.*, c.name AS campaign_name, l.name AS lot_name, l.hectares
+      SELECT
+        cr.*,
+        cn.name AS crop_name,
+        c.name AS campaign_name,
+        l.name AS lot_name,
+        l.hectares
       FROM crops cr
+      JOIN crop_name cn ON cn.id = cr.crop_name_id
       JOIN campaigns c ON c.id = cr.campaign_id
       JOIN lots l ON l.id = cr.lot_id
+      WHERE cr.real_yield > 0    -- 🔹 solo cultivos con cosecha
       ORDER BY cr.start_date DESC
     `);
+
     res.json({ crops: rows });
   } catch (err) {
-    console.error(err); res.status(500).json({ message: "Error al obtener cultivos" });
+    console.error(err);
+    res.status(500).json({ message: "Error al obtener cultivos" });
   }
 };
 
@@ -162,6 +171,36 @@ export const deleteCrop = async (req, res) => {
   } catch (err) {
     console.log(err);
     res.status(500).json({ message: "Error al eliminar cultivo" });
+  }
+};
+
+export const getCropsNotInSale = async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT
+        cr.*,
+        cn.name AS crop_name,
+        c.name AS campaign_name,
+        l.name AS lot_name,
+        l.hectares
+      FROM crops cr
+      JOIN crop_name cn ON cn.id = cr.crop_name_id
+      JOIN campaigns c ON c.id = cr.campaign_id
+      JOIN lots l ON l.id = cr.lot_id
+      LEFT JOIN seed_sales ss
+        ON ss.crop_id = cr.id
+        AND ss.deleted_at IS NULL
+      WHERE cr.real_yield > 0
+        AND ss.id IS NULL
+      ORDER BY cr.start_date DESC
+    `);
+
+    res.json({ crops: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: "Error al obtener cultivos sin ventas",
+    });
   }
 };
 
