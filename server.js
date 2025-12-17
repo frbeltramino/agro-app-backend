@@ -17,6 +17,7 @@ import taskTypesRoutes from "./src/routes/task.types.routes.js";
 import stockStatsRoutes from "./src/routes/stock.stats.routes.js";
 import seedSalesRoutes from "./src/routes/sales.seed.routes.js";
 import cropStockRoutes from "./src/routes/crop.stock.routes.js";
+import seedSaleDeliveries from "./src/routes/seedSaleDeliveries.routes.js";
 
 
 dotenv.config();
@@ -43,6 +44,8 @@ app.use('/api/task/types', taskTypesRoutes);
 app.use('/api/stats/stock', stockStatsRoutes);
 app.use('/api/sales/seed', seedSalesRoutes);
 app.use('/api/crop/stock', cropStockRoutes);
+app.use('/api/deliveries/seed', seedSaleDeliveries);
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

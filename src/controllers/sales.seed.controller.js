@@ -6,56 +6,72 @@ export const getSeedSales = async (req, res) => {
     const limit = Number(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-    const {
-      waybill_number = "",
-      destination = "",
-      start_date = "",
-      end_date = "",
-    } = req.query;
+    const { waybill_number = "", destination = "", start_date = "", end_date = "" } = req.query;
 
-    let where = "WHERE deleted_at IS NULL"; // soft delete seguro
+    let where = "WHERE ss.deleted_at IS NULL";
     const values = [];
 
     if (waybill_number) {
-      where += " AND waybill_number LIKE ?";
+      where += " AND ss.waybill_number LIKE ?";
       values.push(`%${waybill_number}%`);
     }
 
     if (destination) {
-      where += " AND destination LIKE ?";
+      where += " AND ss.destination LIKE ?";
       values.push(`%${destination}%`);
     }
 
     if (start_date) {
-      where += " AND sale_date >= ?";
+      where += " AND ss.sale_date >= ?";
       values.push(start_date);
     }
 
     if (end_date) {
-      where += " AND sale_date <= ?";
+      where += " AND ss.sale_date <= ?";
       values.push(end_date);
     }
 
-    // Excluir cancelados si no querés mostrarlos
-    where += " AND status != 'canceled'";
+    where += " AND ss.status != 'canceled'";
 
-    // 🔹 Query principal
+    /* ============================
+       QUERY PRINCIPAL
+    ============================ */
     const [rows] = await pool.query(
       `
-      SELECT *
-      FROM seed_sales
+      SELECT
+        ss.*,
+        -- Creamos el JSON agregando solo los deliveries que existan
+        IF(COUNT(ssd.id) = 0, JSON_ARRAY(), 
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'id', ssd.id,
+              'delivery_date', ssd.delivery_date,
+              'destination', ssd.destination,
+              'kg_delivered', ssd.kg_delivered,
+              'price_per_kg', ssd.price_per_kg,
+              'created_at', ssd.created_at,
+              'updated_at', ssd.updated_at
+            )
+          )
+        ) AS deliveries
+      FROM seed_sales ss
+      LEFT JOIN seed_sale_deliveries ssd
+        ON ssd.seed_sale_id = ss.id
       ${where}
-      ORDER BY sale_date DESC
+      GROUP BY ss.id
+      ORDER BY ss.sale_date DESC
       LIMIT ? OFFSET ?
       `,
       [...values, limit, offset]
     );
 
-    // 🔹 Query para total (sin limit/offset)
+    /* ============================
+       TOTAL PARA PAGINACIÓN
+    ============================ */
     const [[count]] = await pool.query(
       `
       SELECT COUNT(*) AS total
-      FROM seed_sales
+      FROM seed_sales ss
       ${where}
       `,
       values
@@ -75,6 +91,8 @@ export const getSeedSales = async (req, res) => {
     res.status(500).json({ message: "Error al obtener ventas" });
   }
 };
+
+
 
 export const getSeedSaleById = async (req, res) => {
   try {
@@ -98,6 +116,7 @@ export const createOrUpdateSeedSale = async (req, res) => {
   try {
     const { id } = req.params;
     const {
+      crop_id,
       waybill_number,
       sale_date,
       destination,
@@ -106,9 +125,11 @@ export const createOrUpdateSeedSale = async (req, res) => {
       status,
     } = req.body;
 
-    if (!waybill_number || !sale_date || !destination) {
+    // ✅ Validaciones
+    if (!crop_id || !waybill_number || !sale_date || !destination) {
       return res.status(400).json({
-        message: "Faltan campos obligatorios: waybill_number, sale_date, destination",
+        message:
+          "Faltan campos obligatorios: crop_id, waybill_number, sale_date, destination",
       });
     }
 
@@ -116,24 +137,44 @@ export const createOrUpdateSeedSale = async (req, res) => {
     let seedSaleId = id;
 
     if (id) {
-      // UPDATE
+      // 🔄 UPDATE
       await pool.query(
         `UPDATE seed_sales
-         SET waybill_number = ?, sale_date = ?, destination = ?, 
+         SET crop_id = ?, waybill_number = ?, sale_date = ?, destination = ?,
              kg_delivered = ?, kg_sold = ?, status = ?
-         WHERE id = ?`,
-        [waybill_number, sale_date, destination, kg_delivered, kg_sold, finalStatus, id]
+         WHERE id = ? AND deleted_at IS NULL`,
+        [
+          crop_id,
+          waybill_number,
+          sale_date,
+          destination,
+          kg_delivered,
+          kg_sold,
+          finalStatus,
+          id,
+        ]
       );
     } else {
-      // CREATE
+      // 🆕 CREATE
       const [result] = await pool.query(
-        `INSERT INTO seed_sales (waybill_number, sale_date, destination, kg_delivered, kg_sold, status)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [waybill_number, sale_date, destination, kg_delivered, kg_sold, finalStatus]
+        `INSERT INTO seed_sales
+         (crop_id, waybill_number, sale_date, destination, kg_delivered, kg_sold, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          crop_id,
+          waybill_number,
+          sale_date,
+          destination,
+          kg_delivered,
+          kg_sold,
+          finalStatus,
+        ]
       );
+
       seedSaleId = result.insertId;
     }
 
+    // 🔍 Retornar result
     const [rows] = await pool.query(
       `SELECT * FROM seed_sales WHERE id = ? AND deleted_at IS NULL`,
       [seedSaleId]
@@ -142,21 +183,30 @@ export const createOrUpdateSeedSale = async (req, res) => {
     res.json({ seed_sale: rows[0] });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Error al crear o actualizar venta" });
+    res.status(500).json({
+      message: "Error al crear o actualizar venta",
+    });
   }
 };
+
 
 export const deleteSeedSale = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Soft delete: actualizar deleted_at con timestamp actual
+    // Soft delete de la venta
     await pool.query(
       `UPDATE seed_sales SET deleted_at = NOW() WHERE id = ?`,
       [id]
     );
 
-    res.json({ message: "Venta eliminada correctamente (soft delete)" });
+    // Soft delete de los deliveries asociados
+    await pool.query(
+      `UPDATE seed_sale_deliveries SET deleted_at = NOW() WHERE seed_sale_id = ?`,
+      [id]
+    );
+
+    res.json({ message: "Venta y sus deliveries eliminados correctamente (soft delete)" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Error al eliminar venta" });
