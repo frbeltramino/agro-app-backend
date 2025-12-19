@@ -33,6 +33,17 @@ VALUES
 ('A 4', 13.1868),
 ('A 2', 27.2958);
 
+INSERT INTO master_supplies (name, category_id, unit) VALUES
+('Glifosato 48%', 1, 'lt'),
+('2,4-D Amina', 1, 'lt'),
+('Clorpirifos', 3, 'lt'),
+('Lambda Cihalotrina', 3, 'ml'),
+('Urea 46%', 2, 'kg'),
+('Fosfato Diamónico (DAP)', 2, 'kg'),
+('Mancozeb', 4, 'kg'),
+('Carbendazim', 4, 'lt');
+
+
 INSERT INTO users (name, email, password, roles, status)
 VALUES
 ('Federico Beltramino', 'fedeuser@mail.com', '$2b$10$FSdBHx5uV.NTUJeIjyCcGee4LcXwjmwA8ltJfegLl84qPNbBa7qEy', JSON_ARRAY('admin'), 'active'),

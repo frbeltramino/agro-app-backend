@@ -18,6 +18,7 @@ import stockStatsRoutes from "./src/routes/stock.stats.routes.js";
 import seedSalesRoutes from "./src/routes/sales.seed.routes.js";
 import cropStockRoutes from "./src/routes/crop.stock.routes.js";
 import seedSaleDeliveries from "./src/routes/seedSaleDeliveries.routes.js";
+import supplyMasterRoutes from "./src/routes/supply.master.routes.js";
 
 
 dotenv.config();
@@ -45,6 +46,7 @@ app.use('/api/stats/stock', stockStatsRoutes);
 app.use('/api/sales/seed', seedSalesRoutes);
 app.use('/api/crop/stock', cropStockRoutes);
 app.use('/api/deliveries/seed', seedSaleDeliveries);
+app.use('/api/master/supplies', supplyMasterRoutes);
 
 
 const PORT = process.env.PORT || 3000;

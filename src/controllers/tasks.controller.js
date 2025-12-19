@@ -43,11 +43,9 @@ export const getTasksByCropId = async (req, res) => {
     const limitNum = Number(limit);
     const offset = (pageNum - 1) * limitNum;
 
-    // --- FILTROS DINÁMICOS ---
     const filters = ["t.crop_id = ?", "t.status = 'active'"];
     const params = [cropId];
 
-    // FILTRAR POR ID DEL TIPO DE TAREA
     if (type) {
       filters.push("t.task_type_id = ?");
       params.push(Number(type));
@@ -60,7 +58,9 @@ export const getTasksByCropId = async (req, res) => {
 
     const whereClause = "WHERE " + filters.join(" AND ");
 
-    // --- QUERY PRINCIPAL (PAGINADA) ---
+    /* =========================
+       TASKS
+    ========================= */
     const [tasks] = await pool.query(
       `
       SELECT 
@@ -79,9 +79,11 @@ export const getTasksByCropId = async (req, res) => {
     );
 
     const taskIds = tasks.map(t => t.id);
-    let suppliesByTask = {};
+    const suppliesByTask = {};
 
-    // --- SUPPLIES ---
+    /* =========================
+       SUPPLIES (con master_supply_id)
+    ========================= */
     if (taskIds.length > 0) {
       const [supplies] = await pool.query(
         `
@@ -89,6 +91,7 @@ export const getTasksByCropId = async (req, res) => {
           ts.task_id,
           ts.supply_id,
           ts.stock_id,
+          s.master_supply_id,
           COALESCE(s.name, st.name) AS supply_name,
           COALESCE(sc.name, sct.name) AS category_name,
           COALESCE(s.unit, st.unit) AS unit,
@@ -111,6 +114,7 @@ export const getTasksByCropId = async (req, res) => {
         if (!suppliesByTask[s.task_id]) suppliesByTask[s.task_id] = [];
         suppliesByTask[s.task_id].push({
           supply_id: s.supply_id,
+          master_supply_id: s.master_supply_id, // 👈 NUEVO
           stock_id: s.stock_id,
           supply_name: s.supply_name,
           category_name: s.category_name,
@@ -129,7 +133,9 @@ export const getTasksByCropId = async (req, res) => {
       supplies: suppliesByTask[task.id] || []
     }));
 
-    // --- CONTADOR ---
+    /* =========================
+       COUNT
+    ========================= */
     const [countRows] = await pool.query(
       `
       SELECT COUNT(*) AS total 
@@ -141,13 +147,12 @@ export const getTasksByCropId = async (req, res) => {
     );
 
     const total = countRows[0].total;
-    const totalPages = Math.ceil(total / limitNum);
 
     res.json({
       page: pageNum,
       limit: limitNum,
       total,
-      totalPages,
+      totalPages: Math.ceil(total / limitNum),
       tasks: tasksWithSupplies
     });
 
@@ -156,6 +161,7 @@ export const getTasksByCropId = async (req, res) => {
     res.status(500).json({ message: "Error al obtener tareas del cultivo" });
   }
 };
+
 
 
 
