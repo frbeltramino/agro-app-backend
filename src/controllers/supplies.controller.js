@@ -48,6 +48,9 @@ export const getSuppliesByCropId = async (req, res) => {
     const filters = [];
     const params = [cropId];
 
+    /* =========================
+       FILTROS
+    ========================= */
     if (name) {
       filters.push("(COALESCE(s.name, st.name) LIKE ?)");
       params.push(`%${name}%`);
@@ -58,7 +61,9 @@ export const getSuppliesByCropId = async (req, res) => {
       params.push(`%${category}%`);
     }
 
-    const filterSql = filters.length ? "AND " + filters.join(" AND ") : "";
+    const filterSql = filters.length
+      ? "AND " + filters.join(" AND ")
+      : "";
 
     /* =========================
        QUERY PRINCIPAL
@@ -71,11 +76,13 @@ export const getSuppliesByCropId = async (req, res) => {
         ts.dose_per_ha,
         ts.hectares,
         ts.total_used,
-        ts.price_per_unit AS unit_price, -- ahora siempre se llama unit_price
+        ts.price_per_unit AS unit_price,
         ts.created_at AS used_at,
 
-        -- supply (si viene de stock, se usa stock)
-        COALESCE(s.id, st.id) AS supply_id,
+        -- supply
+        s.id AS supply_id,
+        s.master_supply_id,
+
         COALESCE(s.name, st.name) AS supply_name,
         COALESCE(s.unit, st.unit) AS supply_unit,
 
@@ -94,9 +101,12 @@ export const getSuppliesByCropId = async (req, res) => {
         END AS from_stock
 
       FROM crop_tasks ct
-      INNER JOIN task_supplies ts ON ts.task_id = ct.task_id
-      LEFT JOIN supplies s ON ts.supply_id = s.id
-      LEFT JOIN stock st ON ts.stock_id = st.id
+      INNER JOIN task_supplies ts
+        ON ts.task_id = ct.task_id
+      LEFT JOIN supplies s
+        ON ts.supply_id = s.id
+      LEFT JOIN stock st
+        ON ts.stock_id = st.id
       LEFT JOIN supply_category sc
         ON sc.id = COALESCE(s.category_id, st.category_id)
 
@@ -116,7 +126,8 @@ export const getSuppliesByCropId = async (req, res) => {
       `
       SELECT COUNT(*) AS total
       FROM crop_tasks ct
-      INNER JOIN task_supplies ts ON ts.task_id = ct.task_id
+      INNER JOIN task_supplies ts
+        ON ts.task_id = ct.task_id
       WHERE ct.crop_id = ?
       `,
       [cropId]
@@ -150,6 +161,7 @@ export const createOrUpdateSupply = async (req, res) => {
     const {
       id,
       crop_id,
+      master_supply_id,
       name,
       category_id,
       unit,
@@ -159,10 +171,12 @@ export const createOrUpdateSupply = async (req, res) => {
       status,
     } = req.body;
 
-    // Validaciones mínimas
-    if (!crop_id || !name || !category_id) {
+    /* =========================
+       VALIDACIONES
+    ========================= */
+    if (!crop_id || !name || !master_supply_id) {
       return res.status(400).json({
-        message: "'crop_id', 'name' y 'category_id' son obligatorios",
+        message: "'crop_id', 'name' y 'master_supply_id' son obligatorios",
       });
     }
 
@@ -174,17 +188,27 @@ export const createOrUpdateSupply = async (req, res) => {
 
     let supplyId = id;
 
-    // Si viene id → UPDATE
+    /* =========================
+       UPDATE
+    ========================= */
     if (id) {
       await pool.query(
         `
-        UPDATE supplies 
-        SET crop_id = ?, name = ?, category_id = ?, unit = ?, 
-            dose_per_ha = ?, hectares = ?, price_per_unit = ?, status = ?
+        UPDATE supplies
+        SET crop_id = ?,
+            master_supply_id = ?,
+            name = ?,
+            category_id = ?,
+            unit = ?,
+            dose_per_ha = ?,
+            hectares = ?,
+            price_per_unit = ?,
+            status = ?
         WHERE id = ?
         `,
         [
           crop_id,
+          master_supply_id,
           name,
           category_id,
           finalUnit,
@@ -195,15 +219,20 @@ export const createOrUpdateSupply = async (req, res) => {
           id,
         ]
       );
-    } else {
-      // Si NO viene id → CREATE
+    }
+    /* =========================
+       CREATE
+    ========================= */
+    else {
       const [result] = await pool.query(
         `
-        INSERT INTO supplies (crop_id, name, category_id, unit, dose_per_ha, hectares, price_per_unit, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO supplies
+          (crop_id, master_supply_id, name, category_id, unit, dose_per_ha, hectares, price_per_unit, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           crop_id,
+          master_supply_id,
           name,
           category_id,
           finalUnit,
@@ -216,7 +245,6 @@ export const createOrUpdateSupply = async (req, res) => {
 
       supplyId = result.insertId;
 
-      // 💡 Calcular cantidad real usada: dosis x hectáreas
       const quantity = finalDose * finalHectares;
 
       await pool.query(
@@ -228,23 +256,29 @@ export const createOrUpdateSupply = async (req, res) => {
       );
     }
 
-    // Obtener registro final
+    /* =========================
+       RESPONSE FINAL
+    ========================= */
     const [rows] = await pool.query(
       `
-      SELECT s.*, sc.name AS category_name
+      SELECT
+        s.*,
+        sc.name AS category_name
       FROM supplies s
-      LEFT JOIN supply_category sc ON s.category_id = sc.id
+      LEFT JOIN supply_category sc ON sc.id = s.category_id
       WHERE s.id = ?
       `,
       [supplyId]
     );
 
     res.status(200).json({ supply: rows[0] });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Error al crear o actualizar insumo" });
   }
 };
+
 
 
 export const deleteSupply = async (req, res) => {

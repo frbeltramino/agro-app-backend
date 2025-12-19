@@ -1,15 +1,20 @@
 -- ============================================================
 -- LIMPIAR BASE DE DATOS (DROP TABLAS EN ORDEN CORRECTO)
 -- ============================================================
-DROP TABLE IF EXISTS task_supplies;
+-- Hijas primero
+DROP TABLE IF EXISTS seed_sale_deliveries;
+DROP TABLE IF EXISTS crop_stock;
 DROP TABLE IF EXISTS crop_supplies;
 DROP TABLE IF EXISTS crop_tasks;
-DROP TABLE IF EXISTS crop_stock;
+DROP TABLE IF EXISTS task_supplies;
+DROP TABLE IF EXISTS master_supplies;
 
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS supplies;
 DROP TABLE IF EXISTS stock;
+DROP TABLE IF EXISTS seed_sales;
 
+-- Ahora tablas base
 DROP TABLE IF EXISTS crops;
 DROP TABLE IF EXISTS crop_name;
 DROP TABLE IF EXISTS lots;
@@ -19,8 +24,6 @@ DROP TABLE IF EXISTS supply_category;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS task_types;
 DROP TABLE IF EXISTS lot_master;
-DROP TABLE IF EXISTS seed_sales;
-DROP TABLE IF EXISTS seed_sale_deliveries;
 
 -- ============================================================
 -- TABLAS BASE
@@ -324,8 +327,23 @@ CREATE TABLE seed_sale_deliveries (
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_0900_ai_ci;
 
+/*Nueva tabla maestra para almacenar los suministros*/
+  CREATE TABLE master_supplies (
+    id INT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(150) NOT NULL,
+    category_id INT NOT NULL, -- referencia al tipo de suministro
+    unit VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    CONSTRAINT fk_master_supply_category
+        FOREIGN KEY (category_id) REFERENCES supply_category(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
+/*Ejecutado el dia 17/12/2025*/
 ALTER TABLE seed_sales
 ADD COLUMN crop_id INT NOT NULL AFTER id;
 
@@ -339,3 +357,34 @@ ADD CONSTRAINT fk_seed_sales_crop
   ON UPDATE CASCADE
   ON DELETE RESTRICT;
 
+/*Cambios para la tabla supplies*/
+ALTER TABLE supplies
+ADD COLUMN master_supply_id INT NOT NULL AFTER crop_id;
+
+
+/*Actualizar tabla master_supplies con los nombres de las suministros*/
+INSERT INTO master_supplies (name, category_id, unit)
+SELECT DISTINCT
+    s.name,
+    s.category_id,
+    s.unit
+FROM supplies s
+LEFT JOIN master_supplies ms ON ms.name = s.name
+WHERE ms.id IS NULL;
+
+/*Actualizar tabla supplies con el ID de la suministro maestro*/
+UPDATE supplies s
+JOIN master_supplies ms ON ms.name = s.name
+SET s.master_supply_id = ms.id;
+
+/*hacer el campo master_supply_id obligatorio*/
+ALTER TABLE supplies
+MODIFY master_supply_id INT NOT NULL;
+
+/*Restringir el campo master_supply_id a valores que existen en master_supplies */
+ALTER TABLE supplies
+ADD CONSTRAINT fk_supply_master
+FOREIGN KEY (master_supply_id)
+REFERENCES master_supplies(id)
+ON UPDATE CASCADE
+ON DELETE RESTRICT;
