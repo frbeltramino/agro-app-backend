@@ -113,7 +113,7 @@ export const getSuppliesByCropId = async (req, res) => {
       WHERE ct.crop_id = ?
       ${filterSql}
 
-      ORDER BY ts.created_at DESC
+      ORDER BY COALESCE(s.name, st.name) ASC
       LIMIT ? OFFSET ?
       `,
       [...params, limitNum, offset]

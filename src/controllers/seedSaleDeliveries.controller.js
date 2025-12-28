@@ -16,11 +16,10 @@ export const getSeedSaleDeliveries = async (req, res) => {
     const [rows] = await pool.query(
       `
       SELECT
-        d.*,
-        c.real_yield
+        d.*
       FROM seed_sale_deliveries d
-      JOIN crops c ON c.id = d.crop_id
       WHERE d.seed_sale_id = ?
+        AND d.deleted_at IS NULL
       ORDER BY d.delivery_date ASC
       `,
       [seed_sale_id]
@@ -32,6 +31,7 @@ export const getSeedSaleDeliveries = async (req, res) => {
     res.status(500).json({ message: "Error al obtener entregas" });
   }
 };
+
 
 /* ============================
    GET por ID
@@ -65,20 +65,25 @@ export const createOrUpdateSeedSaleDelivery = async (req, res) => {
 
     const {
       seed_sale_id,
-      crop_id,
+      crop_name_id,
+      waybill_number,
       delivery_date,
       destination,
       kg_delivered,
       price_per_kg,
     } = req.body;
 
+    // ============================
+    // 0. Validaciones básicas
+    // ============================
     if (
       !seed_sale_id ||
-      !crop_id ||
+      !crop_name_id ||
+      !waybill_number ||
       !delivery_date ||
       !destination ||
-      !kg_delivered ||
-      !price_per_kg
+      kg_delivered == null ||
+      price_per_kg == null
     ) {
       return res.status(400).json({
         message: "Faltan campos obligatorios",
@@ -105,7 +110,7 @@ export const createOrUpdateSeedSaleDelivery = async (req, res) => {
     }
 
     /* ============================
-       2. KG ya vendidos (vigentes)
+       2. KG ya entregados (vigentes)
     ============================ */
     let extraKg = 0;
 
@@ -122,9 +127,9 @@ export const createOrUpdateSeedSaleDelivery = async (req, res) => {
       extraKg = current?.kg_delivered || 0;
     }
 
-    const [[sold]] = await pool.query(
+    const [[delivered]] = await pool.query(
       `
-      SELECT IFNULL(SUM(kg_delivered),0) AS total_sold
+      SELECT IFNULL(SUM(kg_delivered), 0) AS total_delivered
       FROM seed_sale_deliveries
       WHERE seed_sale_id = ?
         AND deleted_at IS NULL
@@ -133,7 +138,7 @@ export const createOrUpdateSeedSaleDelivery = async (req, res) => {
     );
 
     const kgAvailable =
-      seedSale.kg_delivered - sold.total_sold + extraKg;
+      seedSale.kg_delivered - delivered.total_delivered + extraKg;
 
     if (kg_delivered > kgAvailable) {
       return res.status(400).json({
@@ -147,20 +152,23 @@ export const createOrUpdateSeedSaleDelivery = async (req, res) => {
     let deliveryId = id;
 
     if (id) {
-      // UPDATE
+      // 🔄 UPDATE
       await pool.query(
         `
         UPDATE seed_sale_deliveries
         SET
-          crop_id = ?,
+          waybill_number = ?,
+          crop_name_id = ?,
           delivery_date = ?,
           destination = ?,
           kg_delivered = ?,
           price_per_kg = ?
         WHERE id = ?
+          AND deleted_at IS NULL
         `,
         [
-          crop_id,
+          waybill_number,
+          crop_name_id,
           delivery_date,
           destination,
           kg_delivered,
@@ -169,23 +177,25 @@ export const createOrUpdateSeedSaleDelivery = async (req, res) => {
         ]
       );
     } else {
-      // CREATE
+      // 🆕 CREATE
       const [result] = await pool.query(
         `
         INSERT INTO seed_sale_deliveries
         (
           seed_sale_id,
-          crop_id,
+          waybill_number,
+          crop_name_id,
           delivery_date,
           destination,
           kg_delivered,
           price_per_kg
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         `,
         [
           seed_sale_id,
-          crop_id,
+          waybill_number,
+          crop_name_id,
           delivery_date,
           destination,
           kg_delivered,
@@ -197,13 +207,13 @@ export const createOrUpdateSeedSaleDelivery = async (req, res) => {
     }
 
     /* ============================
-       4. Recalcular kg_sold
+       4. Recalcular kg_sold en seed_sales
     ============================ */
     await pool.query(
       `
       UPDATE seed_sales
       SET kg_sold = (
-        SELECT IFNULL(SUM(kg_delivered),0)
+        SELECT IFNULL(SUM(kg_delivered), 0)
         FROM seed_sale_deliveries
         WHERE seed_sale_id = ?
           AND deleted_at IS NULL
@@ -221,20 +231,19 @@ export const createOrUpdateSeedSaleDelivery = async (req, res) => {
       SELECT *
       FROM seed_sale_deliveries
       WHERE id = ?
+        AND deleted_at IS NULL
       `,
       [deliveryId]
     );
 
     res.json({ delivery });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({
-      message: "Error al crear o actualizar la venta",
+      message: "Error al crear o actualizar la entrega",
     });
   }
 };
-
 
 
 /* ============================
@@ -244,14 +253,66 @@ export const deleteSeedSaleDelivery = async (req, res) => {
   try {
     const { id } = req.params;
 
-    await pool.query(
-      `DELETE FROM seed_sale_deliveries WHERE id = ?`,
+    /* ============================
+       1. Obtener seed_sale_id
+    ============================ */
+    const [[delivery]] = await pool.query(
+      `
+      SELECT seed_sale_id
+      FROM seed_sale_deliveries
+      WHERE id = ?
+        AND deleted_at IS NULL
+      `,
       [id]
     );
 
-    res.json({ message: "Entrega eliminada correctamente" });
+    if (!delivery) {
+      return res.status(404).json({
+        message: "La entrega no existe o ya fue eliminada",
+      });
+    }
+
+    const seedSaleId = delivery.seed_sale_id;
+
+    /* ============================
+       2. Soft delete del delivery
+    ============================ */
+    await pool.query(
+      `
+      UPDATE seed_sale_deliveries
+      SET deleted_at = NOW()
+      WHERE id = ?
+      `,
+      [id]
+    );
+
+    /* ============================
+       3. Recalcular kg_sold
+    ============================ */
+    await pool.query(
+      `
+      UPDATE seed_sales
+      SET kg_sold = (
+        SELECT IFNULL(SUM(kg_delivered), 0)
+        FROM seed_sale_deliveries
+        WHERE seed_sale_id = ?
+          AND deleted_at IS NULL
+      )
+      WHERE id = ?
+        AND deleted_at IS NULL
+      `,
+      [seedSaleId, seedSaleId]
+    );
+
+    res.json({
+      message: "Entrega eliminada correctamente y KG vendidos actualizados",
+    });
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Error al eliminar entrega" });
+    res.status(500).json({
+      message: "Error al eliminar la entrega",
+    });
   }
 };
+

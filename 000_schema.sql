@@ -388,3 +388,55 @@ FOREIGN KEY (master_supply_id)
 REFERENCES master_supplies(id)
 ON UPDATE CASCADE
 ON DELETE RESTRICT;
+
+/*Agrego campo de tipo de cultivo a la tabla de ventas de cultivos*/
+ALTER TABLE seed_sales
+ADD COLUMN crop_name_id INT NOT NULL;
+
+UPDATE seed_sales ss
+JOIN crops cr ON cr.id = ss.crop_id
+SET ss.crop_name_id = cr.crop_name_id;
+
+ALTER TABLE seed_sales
+ADD CONSTRAINT fk_seed_sales_crop_name
+FOREIGN KEY (crop_name_id)
+REFERENCES crop_name(id)
+ON UPDATE CASCADE
+ON DELETE RESTRICT;
+
+/*Modifico la tabla de deliveries por entrega*/
+ALTER TABLE seed_sale_deliveries
+ADD COLUMN crop_name_id INT NOT NULL AFTER seed_sale_id;
+
+UPDATE seed_sale_deliveries ssd
+JOIN crops c ON c.id = ssd.crop_id
+SET ssd.crop_name_id = c.crop_name_id;
+
+ALTER TABLE seed_sale_deliveries
+DROP FOREIGN KEY fk_ssd_crop;
+
+ALTER TABLE seed_sale_deliveries
+DROP COLUMN crop_id;
+
+ALTER TABLE seed_sale_deliveries
+ADD CONSTRAINT fk_ssd_crop_name
+FOREIGN KEY (crop_name_id) REFERENCES crop_name(id)
+ON UPDATE CASCADE
+ON DELETE RESTRICT;
+
+
+/*Quitar columna crop_id de seed_sales*/
+ALTER TABLE seed_sales
+DROP FOREIGN KEY fk_seed_sales_crop;
+
+ALTER TABLE seed_sales
+DROP INDEX idx_crop;
+
+ALTER TABLE seed_sales
+DROP COLUMN crop_id;
+
+/*Agrego campo de waybill_number a la tabla de entregas*/
+
+ALTER TABLE seed_sale_deliveries
+ADD COLUMN waybill_number VARCHAR(50) NOT NULL
+AFTER id;

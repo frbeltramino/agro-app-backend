@@ -12,15 +12,13 @@ VALUES
 
 INSERT INTO supply_category (name)
 VALUES
-('Herbicida'),
-('Fertilizante'),
-('Insecticida'),
-('Funguicida');
+  ('Herbicida'),
+  ('Insecticida'),
+  ('Funguicida');
 
 INSERT INTO task_types (name)
 VALUES
 ('Siembra'),
-('Fertilización'),
 ('Fumigación'),
 ('Fungicida');
 
@@ -34,15 +32,10 @@ VALUES
 ('A 2', 27.2958);
 
 INSERT INTO master_supplies (name, category_id, unit) VALUES
-('Glifosato 48%', 1, 'lt'),
-('2,4-D Amina', 1, 'lt'),
-('Clorpirifos', 3, 'lt'),
-('Lambda Cihalotrina', 3, 'ml'),
-('Urea 46%', 2, 'kg'),
-('Fosfato Diamónico (DAP)', 2, 'kg'),
-('Mancozeb', 4, 'kg'),
-('Carbendazim', 4, 'lt');
-
+  ('Glifosato 48%', 1, 'lt'),
+  ('2,4-D Amina', 1, 'lt'),
+  ('Clorpirifos', 2, 'lt'),
+  ('Carbendazim', 3, 'lt');
 
 INSERT INTO users (name, email, password, roles, status)
 VALUES

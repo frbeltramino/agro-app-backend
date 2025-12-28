@@ -72,7 +72,7 @@ export const getTasksByCropId = async (req, res) => {
       LEFT JOIN crop_tasks ct ON ct.task_id = t.id
       LEFT JOIN task_types tt ON tt.id = t.task_type_id
       ${whereClause}
-      ORDER BY t.date DESC, t.created_at DESC
+      ORDER BY t.date ASC, t.created_at ASC
       LIMIT ? OFFSET ?
       `,
       [...params, limitNum, offset]
