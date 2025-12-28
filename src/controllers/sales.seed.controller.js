@@ -38,30 +38,34 @@ export const getSeedSales = async (req, res) => {
     ============================ */
     const [rows] = await pool.query(
       `
-      SELECT
-        ss.*,
-        -- Creamos el JSON agregando solo los deliveries que existan
-        IF(COUNT(ssd.id) = 0, JSON_ARRAY(), 
-          JSON_ARRAYAGG(
-            JSON_OBJECT(
-              'id', ssd.id,
-              'delivery_date', ssd.delivery_date,
-              'destination', ssd.destination,
-              'kg_delivered', ssd.kg_delivered,
-              'price_per_kg', ssd.price_per_kg,
-              'created_at', ssd.created_at,
-              'updated_at', ssd.updated_at
-            )
-          )
-        ) AS deliveries
-      FROM seed_sales ss
-      LEFT JOIN seed_sale_deliveries ssd
-        ON ssd.seed_sale_id = ss.id
-      ${where}
-      GROUP BY ss.id
-      ORDER BY ss.sale_date DESC
-      LIMIT ? OFFSET ?
-      `,
+  SELECT
+    ss.*,
+    cn.name AS crop_name,
+    IF(COUNT(ssd.id) = 0, JSON_ARRAY(), 
+      JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'id', ssd.id,
+          'crop_name_id', ssd.crop_name_id, 
+          'waybill_number', ssd.waybill_number,
+          'delivery_date', ssd.delivery_date,
+          'destination', ssd.destination,
+          'kg_delivered', ssd.kg_delivered,
+          'price_per_kg', ssd.price_per_kg,
+          'created_at', ssd.created_at,
+          'updated_at', ssd.updated_at
+        )
+      )
+    ) AS deliveries
+  FROM seed_sales ss
+  JOIN crop_name cn
+    ON cn.id = ss.crop_name_id
+  LEFT JOIN seed_sale_deliveries ssd
+    ON ssd.seed_sale_id = ss.id AND ssd.deleted_at IS NULL
+  ${where}
+  GROUP BY ss.id, cn.name
+  ORDER BY ss.sale_date DESC
+  LIMIT ? OFFSET ?
+  `,
       [...values, limit, offset]
     );
 
@@ -116,7 +120,7 @@ export const createOrUpdateSeedSale = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      crop_id,
+      crop_name_id,
       waybill_number,
       sale_date,
       destination,
@@ -126,10 +130,10 @@ export const createOrUpdateSeedSale = async (req, res) => {
     } = req.body;
 
     // ✅ Validaciones
-    if (!crop_id || !waybill_number || !sale_date || !destination) {
+    if (!crop_name_id || !waybill_number || !sale_date || !destination) {
       return res.status(400).json({
         message:
-          "Faltan campos obligatorios: crop_id, waybill_number, sale_date, destination",
+          "Faltan campos obligatorios: crop_name_id, waybill_number, sale_date, destination",
       });
     }
 
@@ -140,16 +144,15 @@ export const createOrUpdateSeedSale = async (req, res) => {
       // 🔄 UPDATE
       await pool.query(
         `UPDATE seed_sales
-         SET crop_id = ?, waybill_number = ?, sale_date = ?, destination = ?,
-             kg_delivered = ?, kg_sold = ?, status = ?
+         SET crop_name_id = ?, waybill_number = ?, sale_date = ?, destination = ?,
+             kg_delivered = ?, status = ?
          WHERE id = ? AND deleted_at IS NULL`,
         [
-          crop_id,
+          crop_name_id,
           waybill_number,
           sale_date,
           destination,
           kg_delivered,
-          kg_sold,
           finalStatus,
           id,
         ]
@@ -158,10 +161,10 @@ export const createOrUpdateSeedSale = async (req, res) => {
       // 🆕 CREATE
       const [result] = await pool.query(
         `INSERT INTO seed_sales
-         (crop_id, waybill_number, sale_date, destination, kg_delivered, kg_sold, status)
+         (crop_name_id, waybill_number, sale_date, destination, kg_delivered, kg_sold, status)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
-          crop_id,
+          crop_name_id,
           waybill_number,
           sale_date,
           destination,
@@ -174,7 +177,7 @@ export const createOrUpdateSeedSale = async (req, res) => {
       seedSaleId = result.insertId;
     }
 
-    // 🔍 Retornar result
+    // 🔍 Retornar resultado
     const [rows] = await pool.query(
       `SELECT * FROM seed_sales WHERE id = ? AND deleted_at IS NULL`,
       [seedSaleId]

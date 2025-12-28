@@ -174,32 +174,38 @@ export const deleteCrop = async (req, res) => {
   }
 };
 
-export const getCropsNotInSale = async (req, res) => {
+export const getCropsForSale = async (req, res) => {
   try {
     const [rows] = await pool.query(`
-      SELECT
-        cr.*,
-        cn.name AS crop_name,
-        c.name AS campaign_name,
-        l.name AS lot_name,
-        l.hectares
-      FROM crops cr
-      JOIN crop_name cn ON cn.id = cr.crop_name_id
-      JOIN campaigns c ON c.id = cr.campaign_id
-      JOIN lots l ON l.id = cr.lot_id
-      LEFT JOIN seed_sales ss
-        ON ss.crop_id = cr.id
-        AND ss.deleted_at IS NULL
-      WHERE cr.real_yield > 0
-        AND ss.id IS NULL
-      ORDER BY cr.start_date DESC
+ SELECT
+    cn.id AS crop_name_id,
+    cn.name AS crop_name,
+    SUM(cr.real_yield) AS total_harvested_kg,
+    COALESCE(ss_totals.total_sold_kg, 0) AS total_sold_kg,
+    SUM(cr.real_yield) - COALESCE(ss_totals.total_sold_kg, 0) AS available_kg
+FROM crop_name cn
+JOIN crops cr
+    ON cr.crop_name_id = cn.id
+LEFT JOIN (
+    SELECT
+        crop_name_id,
+        SUM(kg_sold) AS total_sold_kg
+    FROM seed_sales
+    WHERE deleted_at IS NULL
+      AND status != 'canceled'
+    GROUP BY crop_name_id
+) ss_totals
+    ON ss_totals.crop_name_id = cn.id
+GROUP BY cn.id, cn.name
+HAVING available_kg > 0
+ORDER BY cn.name ASC;
     `);
 
     res.json({ crops: rows });
   } catch (err) {
     console.error(err);
     res.status(500).json({
-      message: "Error al obtener cultivos sin ventas",
+      message: "Error al obtener cultivos disponibles para venta",
     });
   }
 };
