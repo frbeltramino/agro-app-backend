@@ -389,6 +389,7 @@ REFERENCES master_supplies(id)
 ON UPDATE CASCADE
 ON DELETE RESTRICT;
 
+/*Ejecutado el dia 28/12/2025*/
 /*Agrego campo de tipo de cultivo a la tabla de ventas de cultivos*/
 ALTER TABLE seed_sales
 ADD COLUMN crop_name_id INT NOT NULL;
@@ -440,3 +441,5 @@ DROP COLUMN crop_id;
 ALTER TABLE seed_sale_deliveries
 ADD COLUMN waybill_number VARCHAR(50) NOT NULL
 AFTER id;
+
+/*Ejecutado el dia 28/12/2025*/
