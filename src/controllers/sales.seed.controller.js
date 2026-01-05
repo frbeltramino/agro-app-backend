@@ -8,8 +8,13 @@ export const getSeedSales = async (req, res) => {
 
     const { waybill_number = "", destination = "", start_date = "", end_date = "" } = req.query;
 
-    let where = "WHERE ss.deleted_at IS NULL";
-    const values = [];
+    const userId = req.user?.id; // 👈 ID del usuario autenticado
+    if (!userId) {
+      return res.status(401).json({ message: "Usuario no autenticado" });
+    }
+
+    let where = "WHERE ss.deleted_at IS NULL AND ss.userId = ?";
+    const values = [userId]; // 👈 agregar userId como primer parámetro
 
     if (waybill_number) {
       where += " AND ss.waybill_number LIKE ?";
@@ -38,34 +43,34 @@ export const getSeedSales = async (req, res) => {
     ============================ */
     const [rows] = await pool.query(
       `
-  SELECT
-    ss.*,
-    cn.name AS crop_name,
-    IF(COUNT(ssd.id) = 0, JSON_ARRAY(), 
-      JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'id', ssd.id,
-          'crop_name_id', ssd.crop_name_id, 
-          'waybill_number', ssd.waybill_number,
-          'delivery_date', ssd.delivery_date,
-          'destination', ssd.destination,
-          'kg_delivered', ssd.kg_delivered,
-          'price_per_kg', ssd.price_per_kg,
-          'created_at', ssd.created_at,
-          'updated_at', ssd.updated_at
-        )
-      )
-    ) AS deliveries
-  FROM seed_sales ss
-  JOIN crop_name cn
-    ON cn.id = ss.crop_name_id
-  LEFT JOIN seed_sale_deliveries ssd
-    ON ssd.seed_sale_id = ss.id AND ssd.deleted_at IS NULL
-  ${where}
-  GROUP BY ss.id, cn.name
-  ORDER BY ss.sale_date DESC
-  LIMIT ? OFFSET ?
-  `,
+      SELECT
+        ss.*,
+        cn.name AS crop_name,
+        IF(COUNT(ssd.id) = 0, JSON_ARRAY(), 
+          JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'id', ssd.id,
+              'crop_name_id', ssd.crop_name_id, 
+              'waybill_number', ssd.waybill_number,
+              'delivery_date', ssd.delivery_date,
+              'destination', ssd.destination,
+              'kg_delivered', ssd.kg_delivered,
+              'price_per_kg', ssd.price_per_kg,
+              'created_at', ssd.created_at,
+              'updated_at', ssd.updated_at
+            )
+          )
+        ) AS deliveries
+      FROM seed_sales ss
+      JOIN crop_name cn
+        ON cn.id = ss.crop_name_id
+      LEFT JOIN seed_sale_deliveries ssd
+        ON ssd.seed_sale_id = ss.id AND ssd.deleted_at IS NULL
+      ${where}
+      GROUP BY ss.id, cn.name
+      ORDER BY ss.sale_date DESC
+      LIMIT ? OFFSET ?
+      `,
       [...values, limit, offset]
     );
 
@@ -98,6 +103,7 @@ export const getSeedSales = async (req, res) => {
 
 
 
+
 export const getSeedSaleById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -119,13 +125,18 @@ export const getSeedSaleById = async (req, res) => {
 export const createOrUpdateSeedSale = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id; // 👈 usuario autenticado
+
+    if (!userId) {
+      return res.status(401).json({ message: "Usuario no autenticado" });
+    }
+
     const {
       crop_name_id,
       waybill_number,
       sale_date,
       destination,
-      kg_delivered = 0,
-      kg_sold = 0,
+      kg_delivered,
       status,
     } = req.body;
 
@@ -141,12 +152,12 @@ export const createOrUpdateSeedSale = async (req, res) => {
     let seedSaleId = id;
 
     if (id) {
-      // 🔄 UPDATE
+      // 🔄 UPDATE (solo actualiza campos, userId no cambia)
       await pool.query(
         `UPDATE seed_sales
-         SET crop_name_id = ?, waybill_number = ?, sale_date = ?, destination = ?,
-             kg_delivered = ?, status = ?
-         WHERE id = ? AND deleted_at IS NULL`,
+   SET crop_name_id = ?, waybill_number = ?, sale_date = ?, destination = ?,
+       kg_delivered = ?, status = ?
+   WHERE id = ? AND deleted_at IS NULL AND userId = ?`,
         [
           crop_name_id,
           waybill_number,
@@ -155,22 +166,23 @@ export const createOrUpdateSeedSale = async (req, res) => {
           kg_delivered,
           finalStatus,
           id,
+          userId,
         ]
       );
     } else {
       // 🆕 CREATE
       const [result] = await pool.query(
         `INSERT INTO seed_sales
-         (crop_name_id, waybill_number, sale_date, destination, kg_delivered, kg_sold, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+   (crop_name_id, waybill_number, sale_date, destination, kg_delivered, kg_sold, status, userId)
+   VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
         [
           crop_name_id,
           waybill_number,
           sale_date,
           destination,
           kg_delivered,
-          kg_sold,
           finalStatus,
+          userId,
         ]
       );
 
@@ -179,9 +191,13 @@ export const createOrUpdateSeedSale = async (req, res) => {
 
     // 🔍 Retornar resultado
     const [rows] = await pool.query(
-      `SELECT * FROM seed_sales WHERE id = ? AND deleted_at IS NULL`,
-      [seedSaleId]
+      `SELECT * FROM seed_sales WHERE id = ? AND deleted_at IS NULL AND userId = ?`,
+      [seedSaleId, userId]
     );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Venta no encontrada" });
+    }
 
     res.json({ seed_sale: rows[0] });
   } catch (err) {

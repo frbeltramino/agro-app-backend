@@ -2,6 +2,8 @@ import { pool } from "../db/connection.js";
 
 export const getCampaigns = async (req, res) => {
   try {
+    const userId = req.user.id; // 👈 usuario autenticado
+
     const page = typeof req.query.page === "string" ? parseInt(req.query.page, 10) : 1;
     const search =
       typeof req.query.search === "string" && req.query.search.trim() !== ""
@@ -12,8 +14,8 @@ export const getCampaigns = async (req, res) => {
     const offset = (page - 1) * limit;
 
     // --- WHERE DINÁMICO ---
-    let whereClause = "WHERE c.status = 'active'"; // 👈 SIEMPRE ACTIVAS
-    const params = [];
+    let whereClause = "WHERE c.status = 'active' AND c.userId = ?";
+    const params = [userId];
 
     if (search) {
       whereClause += " AND c.name LIKE ?";
@@ -86,7 +88,6 @@ export const getCampaigns = async (req, res) => {
   }
 };
 
-
 export const getCampaignById = async (req, res) => {
   try {
     const campaignId = req.params.id;
@@ -132,6 +133,7 @@ export const createOrUpdateCampaign = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, start_date, end_date, notes } = req.body;
+    const userId = req.user.id; // 👈 viene del token
 
     if (!name) {
       return res.status(400).json({ message: "El nombre es obligatorio" });
@@ -141,24 +143,38 @@ export const createOrUpdateCampaign = async (req, res) => {
 
     if (!id) {
       const [result] = await pool.query(
-        `INSERT INTO campaigns (name, start_date, end_date, notes)
-         VALUES (?, ?, ?, ?)`,
-        [name, start_date || null, end_date || null, notes || null]
+        `INSERT INTO campaigns (userId, name, start_date, end_date, notes)
+         VALUES (?, ?, ?, ?, ?)`,
+        [userId, name, start_date || null, end_date || null, notes || null]
       );
 
       campaignId = result.insertId;
-      const [created] = await pool.query(`SELECT * FROM campaigns WHERE id = ?`, [campaignId]);
+
+      const [created] = await pool.query(
+        `SELECT * FROM campaigns WHERE id = ?`,
+        [campaignId]
+      );
+
       return res.status(201).json(created[0]);
     }
 
+    // 🔒 Seguridad: solo puede editar sus campañas
     await pool.query(
       `UPDATE campaigns 
        SET name = ?, start_date = ?, end_date = ?, notes = ?
-       WHERE id = ?`,
-      [name, start_date || null, end_date || null, notes || null, id]
+       WHERE id = ? AND userId = ?`,
+      [name, start_date || null, end_date || null, notes || null, id, userId]
     );
 
-    const [updated] = await pool.query(`SELECT * FROM campaigns WHERE id = ?`, [id]);
+    const [updated] = await pool.query(
+      `SELECT * FROM campaigns WHERE id = ? AND userId = ?`,
+      [id, userId]
+    );
+
+    if (!updated.length) {
+      return res.status(404).json({ message: "Campaña no encontrada" });
+    }
+
     return res.status(200).json(updated[0]);
   } catch (err) {
     console.error(err);

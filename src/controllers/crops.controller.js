@@ -65,7 +65,14 @@ export const getCropsByLotId = async (req, res) => {
 
 export const createOrUpdateCrop = async (req, res) => {
   try {
-    const { id } = req.params; // Puede ser "new" o un id numérico
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Usuario no autenticado"
+      });
+    }
 
     const {
       crop_name_id,
@@ -86,12 +93,21 @@ export const createOrUpdateCrop = async (req, res) => {
       const [result] = await pool.query(
         `
         INSERT INTO crops (
-          crop_name_id, start_date, end_date, campaign_id, lot_id,
-          seed_type, expected_yield, total_estimated, real_yield
+          userId,
+          crop_name_id,
+          start_date,
+          end_date,
+          campaign_id,
+          lot_id,
+          seed_type,
+          expected_yield,
+          total_estimated,
+          real_yield
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
+          userId,
           crop_name_id,
           start_date,
           end_date || null,
@@ -104,7 +120,7 @@ export const createOrUpdateCrop = async (req, res) => {
         ]
       );
 
-      return res.json({
+      return res.status(201).json({
         message: "Cultivo creado correctamente",
         cropId: result.insertId
       });
@@ -125,6 +141,7 @@ export const createOrUpdateCrop = async (req, res) => {
         real_yield = ?,
         lot_id = ?
       WHERE id = ?
+        AND userId = ?
       `,
       [
         crop_name_id,
@@ -135,21 +152,29 @@ export const createOrUpdateCrop = async (req, res) => {
         total_estimated || null,
         real_yield || null,
         lot_id,
-        id
+        id,
+        userId
       ]
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Cultivo no encontrado" });
+      return res.status(404).json({
+        message: "Cultivo no encontrado o no pertenece al usuario"
+      });
     }
 
-    return res.json({ message: "Cultivo actualizado correctamente" });
+    return res.json({
+      message: "Cultivo actualizado correctamente"
+    });
 
   } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Error al guardar cultivo" });
+    console.error(err);
+    res.status(500).json({
+      message: "Error al guardar cultivo"
+    });
   }
 };
+
 
 export const deleteCrop = async (req, res) => {
   try {
@@ -176,30 +201,43 @@ export const deleteCrop = async (req, res) => {
 
 export const getCropsForSale = async (req, res) => {
   try {
-    const [rows] = await pool.query(`
- SELECT
-    cn.id AS crop_name_id,
-    cn.name AS crop_name,
-    SUM(cr.real_yield) AS total_harvested_kg,
-    COALESCE(ss_totals.total_sold_kg, 0) AS total_sold_kg,
-    SUM(cr.real_yield) - COALESCE(ss_totals.total_sold_kg, 0) AS available_kg
-FROM crop_name cn
-JOIN crops cr
-    ON cr.crop_name_id = cn.id
-LEFT JOIN (
-    SELECT
-        crop_name_id,
-        SUM(kg_sold) AS total_sold_kg
-    FROM seed_sales
-    WHERE deleted_at IS NULL
-      AND status != 'canceled'
-    GROUP BY crop_name_id
-) ss_totals
-    ON ss_totals.crop_name_id = cn.id
-GROUP BY cn.id, cn.name
-HAVING available_kg > 0
-ORDER BY cn.name ASC;
-    `);
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Usuario no autenticado",
+      });
+    }
+
+    const [rows] = await pool.query(
+      `
+      SELECT
+        cn.id AS crop_name_id,
+        cn.name AS crop_name,
+        SUM(cr.real_yield) AS total_harvested_kg,
+        COALESCE(ss_totals.total_sold_kg, 0) AS total_sold_kg,
+        SUM(cr.real_yield) - COALESCE(ss_totals.total_sold_kg, 0) AS available_kg
+      FROM crop_name cn
+      JOIN crops cr
+        ON cr.crop_name_id = cn.id
+        AND cr.userId = ?
+      LEFT JOIN (
+        SELECT
+          crop_name_id,
+          SUM(kg_sold) AS total_sold_kg
+        FROM seed_sales
+        WHERE deleted_at IS NULL
+          AND status != 'canceled'
+          AND userId = ?
+        GROUP BY crop_name_id
+      ) ss_totals
+        ON ss_totals.crop_name_id = cn.id
+      GROUP BY cn.id, cn.name
+      HAVING available_kg > 0
+      ORDER BY cn.name ASC
+      `,
+      [userId, userId]
+    );
 
     res.json({ crops: rows });
   } catch (err) {
@@ -209,4 +247,5 @@ ORDER BY cn.name ASC;
     });
   }
 };
+
 
