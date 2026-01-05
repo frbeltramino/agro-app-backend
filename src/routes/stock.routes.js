@@ -16,7 +16,9 @@ router.post("/new",
   authorizeRoles("admin"),
   createOrUpdateStock);
 
-router.get("/", getStock);
+router.get("/",
+  validateJWT,
+  getStock);
 
 router.get("/:id", getStockById);
 

@@ -9,7 +9,9 @@ import { authorizeRoles, validateJWT } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/", getSeedSales);
+router.get("/",
+  validateJWT,
+  getSeedSales);
 router.get("/:id", getSeedSaleById);
 router.post("/new",
   validateJWT,

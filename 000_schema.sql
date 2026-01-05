@@ -443,3 +443,71 @@ ADD COLUMN waybill_number VARCHAR(50) NOT NULL
 AFTER id;
 
 /*Ejecutado el dia 28/12/2025*/
+
+/*Alter para agregar columna userId a la tabla de campaigns*/
+ALTER TABLE `campaigns`
+ADD COLUMN `userId` INT NULL AFTER `id`;
+
+UPDATE `campaigns` SET `userId` = 1 WHERE `userId` IS NULL;
+
+ALTER TABLE `campaigns`
+MODIFY COLUMN `userId` INT NOT NULL,
+ADD CONSTRAINT `fk_campaigns_user`
+    FOREIGN KEY (`userId`) REFERENCES `users`(`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE;
+
+/*Alter para agregar columna userId a la tabla de stock*/
+ALTER TABLE stock
+ADD COLUMN userId INT NULL AFTER id;
+
+ALTER TABLE stock
+ADD CONSTRAINT fk_stock_user
+FOREIGN KEY (userId)
+REFERENCES users(id)
+ON DELETE CASCADE
+ON UPDATE CASCADE;
+
+UPDATE stock
+SET userId = 1;
+
+
+/*Alter para agregar columna userId a la tabla de ventas*/
+ALTER TABLE `seed_sales`
+ADD COLUMN `userId` INT NULL AFTER `crop_name_id`,
+ADD INDEX `fk_seed_sales_user` (`userId`),
+ADD CONSTRAINT `fk_seed_sales_user` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON UPDATE CASCADE ON DELETE SET NULL;
+
+ALTER TABLE `seed_sales`
+MODIFY COLUMN `userId` INT NULL AFTER `id`
+
+UPDATE `seed_sales`
+SET `userId` = 1;
+
+
+
+/*Alter para agregar columna userId a la tabla de entregas*/
+ALTER TABLE seed_sale_deliveries
+ADD COLUMN userId INT AFTER seed_sale_id,
+ADD CONSTRAINT fk_deliveries_user FOREIGN KEY (userId) REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE;
+UPDATE `seed_sale_deliveries`
+SET `userId` = 1;
+ALTER TABLE `seed_sale_deliveries`
+MODIFY COLUMN `userId` INT NOT NULL;
+
+
+/*Alter para agregar columna userId a la tabla de Cultivos*/
+ALTER TABLE `crops`
+ADD COLUMN `userId` INT NULL AFTER `id`,
+ADD INDEX `fk_crop_user` (`userId`),
+ADD CONSTRAINT `fk_crop_user`
+    FOREIGN KEY (`userId`) REFERENCES `users` (`id`)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE;
+
+
+UPDATE `crops`
+SET `userId` = 1;
+
+ALTER TABLE `crops`
+MODIFY COLUMN `userId` INT NOT NULL,
