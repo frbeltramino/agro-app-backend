@@ -6,7 +6,7 @@ import { pool } from "../db/connection.js";
 export const getSupplyCategories = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      "SELECT * FROM supply_category ORDER BY created_at DESC"
+      "SELECT * FROM supply_category ORDER BY name ASC"
     );
 
     res.json({ categories: rows });
