@@ -511,3 +511,13 @@ SET `userId` = 1;
 
 ALTER TABLE `crops`
 MODIFY COLUMN `userId` INT NOT NULL,
+
+
+/*modificar columnas de kg por tn en ventas*/
+ALTER TABLE `seed_sales`
+  CHANGE COLUMN `kg_sold` `tn_sold` DECIMAL(10,2) NOT NULL DEFAULT '0.00',
+  CHANGE COLUMN `kg_delivered` `tn_delivered` DECIMAL(10,2) NOT NULL DEFAULT '0.00';
+
+ALTER TABLE `seed_sale_deliveries`
+  CHANGE COLUMN `kg_delivered` `tn_delivered` DECIMAL(10,2) NOT NULL,
+  CHANGE COLUMN `price_per_kg` `price_per_tn` DECIMAL(10,2) NOT NULL;

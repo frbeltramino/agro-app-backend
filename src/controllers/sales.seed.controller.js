@@ -54,8 +54,8 @@ export const getSeedSales = async (req, res) => {
               'waybill_number', ssd.waybill_number,
               'delivery_date', ssd.delivery_date,
               'destination', ssd.destination,
-              'kg_delivered', ssd.kg_delivered,
-              'price_per_kg', ssd.price_per_kg,
+              'tn_delivered', ssd.tn_delivered,
+              'price_per_tn', ssd.price_per_tn,
               'created_at', ssd.created_at,
               'updated_at', ssd.updated_at
             )
@@ -125,7 +125,7 @@ export const getSeedSaleById = async (req, res) => {
 export const createOrUpdateSeedSale = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id; // 👈 usuario autenticado
+    const userId = req.user?.id;
 
     if (!userId) {
       return res.status(401).json({ message: "Usuario no autenticado" });
@@ -136,7 +136,7 @@ export const createOrUpdateSeedSale = async (req, res) => {
       waybill_number,
       sale_date,
       destination,
-      kg_delivered,
+      tn_delivered,  // 👈 ahora en toneladas
       status,
     } = req.body;
 
@@ -152,18 +152,18 @@ export const createOrUpdateSeedSale = async (req, res) => {
     let seedSaleId = id;
 
     if (id) {
-      // 🔄 UPDATE (solo actualiza campos, userId no cambia)
+      // 🔄 UPDATE
       await pool.query(
         `UPDATE seed_sales
-   SET crop_name_id = ?, waybill_number = ?, sale_date = ?, destination = ?,
-       kg_delivered = ?, status = ?
-   WHERE id = ? AND deleted_at IS NULL AND userId = ?`,
+         SET crop_name_id = ?, waybill_number = ?, sale_date = ?, destination = ?,
+             tn_delivered = ?, status = ?
+         WHERE id = ? AND deleted_at IS NULL AND userId = ?`,
         [
           crop_name_id,
           waybill_number,
           sale_date,
           destination,
-          kg_delivered,
+          tn_delivered,
           finalStatus,
           id,
           userId,
@@ -173,14 +173,14 @@ export const createOrUpdateSeedSale = async (req, res) => {
       // 🆕 CREATE
       const [result] = await pool.query(
         `INSERT INTO seed_sales
-   (crop_name_id, waybill_number, sale_date, destination, kg_delivered, kg_sold, status, userId)
-   VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+         (crop_name_id, waybill_number, sale_date, destination, tn_delivered, tn_sold, status, userId)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
         [
           crop_name_id,
           waybill_number,
           sale_date,
           destination,
-          kg_delivered,
+          tn_delivered,
           finalStatus,
           userId,
         ]
@@ -207,6 +207,7 @@ export const createOrUpdateSeedSale = async (req, res) => {
     });
   }
 };
+
 
 
 export const deleteSeedSale = async (req, res) => {
