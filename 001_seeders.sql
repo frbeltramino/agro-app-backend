@@ -136,17 +136,18 @@ INSERT INTO master_supplies (name, category_id, unit) VALUES
 ('Humectante agrícola', 6, 'lt'),
 ('Emulsionante agrícola', 6, 'lt'),
 
--- BIOINSUMOS / OTROS (7)
-('Inoculante para soja', 7, 'lt'),
-('Inoculante para leguminosas', 7, 'lt'),
-('Trichoderma spp.', 7, 'kg'),
-('Bacillus thuringiensis', 7, 'kg'),
-('Micorrizas', 7, 'kg'),
-('Biofertilizante líquido', 7, 'lt'),
-('Extracto de algas', 7, 'lt'),
-('Ácidos húmicos', 7, 'lt'),
-('Ácidos fúlvicos', 7, 'lt'),
-('Enraizante biológico', 7, 'lt');
+-- BIOINSUMOS / OTROS (14)
+('Inoculante para soja', 14, 'lt'),
+('Inoculante para leguminosas', 14, 'lt'),
+('Trichoderma spp.', 14, 'kg'),
+('Bacillus thuringiensis', 14, 'kg'),
+('Micorrizas', 14, 'kg'),
+('Biofertilizante líquido', 14, 'lt'),
+('Extracto de algas', 14, 'lt'),
+('Ácidos húmicos', 14, 'lt'),
+('Ácidos fúlvicos', 14, 'lt'),
+('Enraizante biológico', 14, 'lt');
+
 
 INSERT INTO users (name, email, password, roles, status)
 VALUES

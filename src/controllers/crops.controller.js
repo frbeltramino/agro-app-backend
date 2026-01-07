@@ -214,9 +214,9 @@ export const getCropsForSale = async (req, res) => {
       SELECT
         cn.id AS crop_name_id,
         cn.name AS crop_name,
-        SUM(cr.real_yield) AS total_harvested_kg,
-        COALESCE(ss_totals.total_sold_kg, 0) AS total_sold_kg,
-        SUM(cr.real_yield) - COALESCE(ss_totals.total_sold_kg, 0) AS available_kg
+        SUM(cr.real_yield) AS total_harvested_tn,
+        COALESCE(ss_totals.total_sold_tn, 0) AS total_sold_tn,
+        SUM(cr.real_yield) - COALESCE(ss_totals.total_sold_tn, 0) AS available_tn
       FROM crop_name cn
       JOIN crops cr
         ON cr.crop_name_id = cn.id
@@ -224,7 +224,7 @@ export const getCropsForSale = async (req, res) => {
       LEFT JOIN (
         SELECT
           crop_name_id,
-          SUM(kg_sold) AS total_sold_kg
+          SUM(tn_sold) AS total_sold_tn
         FROM seed_sales
         WHERE deleted_at IS NULL
           AND status != 'canceled'
@@ -233,7 +233,7 @@ export const getCropsForSale = async (req, res) => {
       ) ss_totals
         ON ss_totals.crop_name_id = cn.id
       GROUP BY cn.id, cn.name
-      HAVING available_kg > 0
+      HAVING available_tn > 0
       ORDER BY cn.name ASC
       `,
       [userId, userId]
@@ -247,5 +247,6 @@ export const getCropsForSale = async (req, res) => {
     });
   }
 };
+
 
 
