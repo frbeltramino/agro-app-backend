@@ -521,3 +521,15 @@ ALTER TABLE `seed_sales`
 ALTER TABLE `seed_sale_deliveries`
   CHANGE COLUMN `kg_delivered` `tn_delivered` DECIMAL(10,2) NOT NULL,
   CHANGE COLUMN `price_per_kg` `price_per_tn` DECIMAL(10,2) NOT NULL;
+
+/*agregar columna master_supply_id a la tabla de stock*/
+ALTER TABLE stock
+ADD COLUMN master_supply_id INT NULL DEFAULT NULL;
+
+ALTER TABLE stock
+ADD INDEX fk_stock_master_supply (master_supply_id),
+ADD CONSTRAINT fk_stock_master_supply
+  FOREIGN KEY (master_supply_id)
+  REFERENCES master_supplies (id)
+  ON UPDATE CASCADE
+  ON DELETE SET NULL;

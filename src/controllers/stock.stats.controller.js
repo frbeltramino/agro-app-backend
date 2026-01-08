@@ -11,17 +11,18 @@ export const getStockStats = async (req, res) => {
     // Estadísticas generales del stock del usuario
     const [[stats]] = await pool.query(
       `
-      SELECT
-        COUNT(*) AS total_items,
-        SUM(quantity_available) AS total_quantity,
-        SUM(quantity_available * price_per_unit) AS total_value,
-        SUM(status = 'active') AS active_count,
-        SUM(status = 'inactive') AS inactive_count,
-        SUM(expiration_date < NOW()) AS expired_count,
-        SUM(expiration_date BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 DAY)) AS expiring_soon
-      FROM stock
-      WHERE userId = ?
-      `,
+  SELECT
+    COUNT(*) AS total_items,
+    SUM(quantity_available) AS total_quantity,
+    SUM(quantity_available * price_per_unit) AS total_value,
+    SUM(expiration_date < NOW()) AS expired_count,
+    SUM(
+      expiration_date BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 DAY)
+    ) AS expiring_soon
+  FROM stock
+  WHERE userId = ?
+    AND status = 'active'
+  `,
       [userId]
     );
 

@@ -21,6 +21,7 @@ export const createOrUpdateStock = async (req, res) => {
       price_per_unit,
       expiration_date,
       status,
+      master_supply_id,
     } = req.body;
 
     // -------------------------
@@ -52,6 +53,31 @@ export const createOrUpdateStock = async (req, res) => {
         error: true,
         message: "quantity_available y price_per_unit deben ser números",
       });
+    }
+
+    if (
+      master_supply_id !== undefined &&
+      master_supply_id !== null &&
+      isNaN(Number(master_supply_id))
+    ) {
+      return res.status(400).json({
+        error: true,
+        message: "master_supply_id debe ser numérico",
+      })
+    }
+
+    if (master_supply_id) {
+      const [master] = await pool.query(
+        `SELECT id FROM master_supplies WHERE id = ?`,
+        [master_supply_id]
+      )
+
+      if (master.length === 0) {
+        return res.status(400).json({
+          error: true,
+          message: "El master_supply_id no existe",
+        })
+      }
     }
 
     const validStatus = ["active", "inactive"];
@@ -118,6 +144,11 @@ export const createOrUpdateStock = async (req, res) => {
         values.push(finalStatus);
       }
 
+      if (master_supply_id !== undefined) {
+        fields.push("master_supply_id = ?")
+        values.push(master_supply_id || null)
+      }
+
       if (fields.length === 0) {
         return res.status(400).json({
           error: true,
@@ -150,9 +181,9 @@ export const createOrUpdateStock = async (req, res) => {
     const [result] = await pool.query(
       `
       INSERT INTO stock 
-        (name, category_id, unit, quantity_available, price_per_unit, expiration_date, status, userId)
+        (name, category_id, unit, quantity_available, price_per_unit, expiration_date, status, userId, master_supply_id)
       VALUES 
-        (?, ?, ?, ?, ?, ?, ?, ?)
+        (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         name,
@@ -163,8 +194,9 @@ export const createOrUpdateStock = async (req, res) => {
         finalExpirationDate ?? null,
         finalStatus || "active",
         userId,
+        master_supply_id || null,
       ]
-    );
+    )
 
     const [created] = await pool.query(
       `SELECT * FROM stock WHERE id = ? AND userId = ?`,
