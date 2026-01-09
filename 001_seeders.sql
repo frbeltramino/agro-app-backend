@@ -148,6 +148,13 @@ INSERT INTO master_supplies (name, category_id, unit) VALUES
 ('Ácidos fúlvicos', 14, 'lt'),
 ('Enraizante biológico', 14, 'lt');
 
+INSERT INTO providers (userId, name) VALUES
+  (1, 'Boscarol Adrian'),
+  (1, 'BOSAGRO SRL'),
+  (1, 'Ruatta Sergio'),
+  (1, 'Raspo Marianela'),
+  (1, 'Feraudo y Cortesini');
+
 
 INSERT INTO users (name, email, password, roles, status)
 VALUES

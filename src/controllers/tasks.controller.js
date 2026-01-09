@@ -56,21 +56,36 @@ export const getTasksByCropId = async (req, res) => {
       params.push(`%${description}%`);
     }
 
-    const whereClause = "WHERE " + filters.join(" AND ");
+    const whereClause = `WHERE ${filters.join(" AND ")}`;
 
-    /* =========================
-       TASKS
-    ========================= */
+    // =========================
+    // TASKS
+    // =========================
     const [tasks] = await pool.query(
       `
-      SELECT 
-        t.*, 
-        ct.performed_at, 
+      SELECT
+        t.id,
+        t.crop_id,
+        t.task_type_id,
+        t.provider_id,
+        t.description,
+        t.total_price,
+        t.laborCost,
+        t.date,
+        t.status,
+        t.created_at,
+        t.updated_at,
+
+        ct.performed_at,
         ct.note,
-        tt.name AS type
+
+        tt.name AS type,
+
+        p.name AS provider_name
       FROM tasks t
       LEFT JOIN crop_tasks ct ON ct.task_id = t.id
       LEFT JOIN task_types tt ON tt.id = t.task_type_id
+      LEFT JOIN providers p ON p.id = t.provider_id
       ${whereClause}
       ORDER BY t.date ASC, t.created_at ASC
       LIMIT ? OFFSET ?
@@ -81,13 +96,13 @@ export const getTasksByCropId = async (req, res) => {
     const taskIds = tasks.map(t => t.id);
     const suppliesByTask = {};
 
-    /* =========================
-       SUPPLIES (con master_supply_id)
-    ========================= */
+    // =========================
+    // SUPPLIES
+    // =========================
     if (taskIds.length > 0) {
       const [supplies] = await pool.query(
         `
-        SELECT 
+        SELECT
           ts.task_id,
           ts.supply_id,
           ts.stock_id,
@@ -105,16 +120,16 @@ export const getTasksByCropId = async (req, res) => {
         LEFT JOIN supply_category sc ON sc.id = s.category_id
         LEFT JOIN stock st ON st.id = ts.stock_id
         LEFT JOIN supply_category sct ON sct.id = st.category_id
-        WHERE ts.task_id IN (${taskIds.map(() => '?').join(',')})
+        WHERE ts.task_id IN (${taskIds.map(() => "?").join(",")})
         `,
         taskIds
       );
 
-      supplies.forEach(s => {
+      for (const s of supplies) {
         if (!suppliesByTask[s.task_id]) suppliesByTask[s.task_id] = [];
         suppliesByTask[s.task_id].push({
           supply_id: s.supply_id,
-          master_supply_id: s.master_supply_id, // 👈 NUEVO
+          master_supply_id: s.master_supply_id,
           stock_id: s.stock_id,
           supply_name: s.supply_name,
           category_name: s.category_name,
@@ -123,44 +138,38 @@ export const getTasksByCropId = async (req, res) => {
           dose_per_ha: s.dose_per_ha,
           hectares: s.hectares,
           total_used: s.total_used,
-          from_stock: Boolean(s.from_stock)
+          from_stock: Boolean(s.from_stock),
         });
-      });
+      }
     }
 
     const tasksWithSupplies = tasks.map(task => ({
       ...task,
-      supplies: suppliesByTask[task.id] || []
+      supplies: suppliesByTask[task.id] || [],
     }));
 
-    /* =========================
-       COUNT
-    ========================= */
-    const [countRows] = await pool.query(
-      `
-      SELECT COUNT(*) AS total 
-      FROM tasks t 
-      LEFT JOIN task_types tt ON tt.id = t.task_type_id
-      ${whereClause}
-      `,
+    // =========================
+    // COUNT
+    // =========================
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM tasks t ${whereClause}`,
       params
     );
-
-    const total = countRows[0].total;
 
     res.json({
       page: pageNum,
       limit: limitNum,
       total,
       totalPages: Math.ceil(total / limitNum),
-      tasks: tasksWithSupplies
+      tasks: tasksWithSupplies,
     });
-
   } catch (err) {
-    console.error(err);
+    console.error("Error getTasksByCropId:", err);
     res.status(500).json({ message: "Error al obtener tareas del cultivo" });
   }
 };
+
+
 
 
 
@@ -175,8 +184,8 @@ export const createOrUpdateTask = async (req, res) => {
     const {
       crop_id,
       task_type_id,
+      provider_id,
       description,
-      provider,
       performed_at,
       note,
       laborCost = 0,
@@ -185,6 +194,19 @@ export const createOrUpdateTask = async (req, res) => {
 
     if (!crop_id || !task_type_id || !performed_at) {
       return res.status(400).json({ message: "Faltan datos obligatorios" });
+    }
+
+    if (provider_id) {
+      const [[provider]] = await connection.query(
+        `SELECT id FROM providers WHERE id = ? AND userId = ?`,
+        [provider_id, req.user.id]
+      );
+
+      if (!provider) {
+        return res.status(400).json({
+          message: "Proveedor inválido o no pertenece al usuario",
+        });
+      }
     }
 
     await connection.beginTransaction();
@@ -225,12 +247,12 @@ export const createOrUpdateTask = async (req, res) => {
     if (id) {
       await connection.query(
         `UPDATE tasks 
-         SET task_type_id = ?, description = ?, provider = ?, total_price = ?, laborCost = ?, date = ?
-         WHERE id = ?`,
+        SET task_type_id = ?, provider_id = ?, description = ?, total_price = ?, laborCost = ?, date = ?
+        WHERE id = ?`,
         [
           task_type_id,
+          provider_id || null,
           description,
-          provider || null,
           total_price,
           laborCost,
           performed_at,
@@ -257,13 +279,13 @@ export const createOrUpdateTask = async (req, res) => {
     } else {
       const [taskResult] = await connection.query(
         `INSERT INTO tasks 
-          (crop_id, task_type_id, description, provider, total_price, laborCost, date)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (crop_id, task_type_id, provider_id, description, total_price, laborCost, date)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           crop_id,
           task_type_id,
+          provider_id || null,
           description,
-          provider || null,
           total_price,
           laborCost,
           performed_at,
