@@ -296,7 +296,7 @@ export const createOrUpdateTask = async (req, res) => {
           s.dose_per_ha,
           s.hectares,
           total_used,
-          s.price_per_unit || null, // ✅ usar el dato enviado desde el front
+          s.price_per_unit ?? 0,
         ]
       );
     }
