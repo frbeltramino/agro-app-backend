@@ -24,6 +24,7 @@ DROP TABLE IF EXISTS supply_category;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS task_types;
 DROP TABLE IF EXISTS lot_master;
+DROP TABLE IF EXISTS providers;
 
 -- ============================================================
 -- TABLAS BASE
@@ -533,3 +534,34 @@ ADD CONSTRAINT fk_stock_master_supply
   REFERENCES master_supplies (id)
   ON UPDATE CASCADE
   ON DELETE SET NULL;
+
+
+CREATE TABLE providers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  userId INT NOT NULL,
+  name VARCHAR(150) NOT NULL,
+  UNIQUE (userId, name),
+  CONSTRAINT fk_providers_user
+    FOREIGN KEY (userId)
+    REFERENCES users(id)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE
+);
+
+ALTER TABLE tasks
+ADD COLUMN provider_id INT NULL AFTER task_type_id;
+
+ALTER TABLE tasks
+ADD CONSTRAINT fk_tasks_provider
+FOREIGN KEY (provider_id)
+REFERENCES providers(id)
+ON UPDATE CASCADE
+ON DELETE SET NULL;
+
+ALTER TABLE tasks
+ADD COLUMN provider_backup VARCHAR(150);
+
+UPDATE tasks SET provider_backup = provider;
+
+ALTER TABLE tasks
+DROP COLUMN provider;
