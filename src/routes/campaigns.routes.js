@@ -6,6 +6,9 @@ const router = express.Router();
 router.get("/",
   validateJWT,
   ctrl.getCampaigns);
+router.get("/for-sale",
+  validateJWT,
+  ctrl.getCampaignsSimple);
 router.get("/:id", ctrl.getCampaignById);
 router.post("/new",
   validateJWT,
@@ -19,5 +22,6 @@ router.delete("/:id",
   validateJWT,
   authorizeRoles("admin"),
   ctrl.deleteCampaign);
+
 
 export default router;

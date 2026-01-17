@@ -565,3 +565,25 @@ UPDATE tasks SET provider_backup = provider;
 
 ALTER TABLE tasks
 DROP COLUMN provider;
+
+ALTER TABLE seed_sale_deliveries
+CHANGE waybill_number primary_liquidation_number VARCHAR(50) NOT NULL;
+
+ALTER TABLE seed_sales
+ADD COLUMN campaign_id INT NULL AFTER crop_name_id;
+
+
+UPDATE seed_sales
+SET campaign_id = 1
+WHERE campaign_id IS NULL;
+
+-- 2️⃣ Cambiar la columna a NOT NULL
+ALTER TABLE seed_sales
+MODIFY COLUMN campaign_id INT NOT NULL;
+
+-- 3️⃣ Crear la clave foránea
+ALTER TABLE seed_sales
+ADD CONSTRAINT fk_seed_sales_campaign
+FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
+ON UPDATE CASCADE
+ON DELETE RESTRICT;

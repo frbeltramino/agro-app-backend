@@ -200,3 +200,30 @@ export const deleteCampaign = async (req, res) => {
     res.status(500).json({ message: "Error al dar de baja la campaña" });
   }
 };
+
+export const getCampaignsSimple = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Usuario no autenticado" });
+    }
+
+    const [campaigns] = await pool.query(
+      `
+      SELECT
+        id,
+        name
+      FROM campaigns
+      WHERE status = 'active' AND userId = ?
+      ORDER BY name ASC
+      `,
+      [userId]
+    );
+
+    res.json({ campaigns });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error al obtener campañas" });
+  }
+};

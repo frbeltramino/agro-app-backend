@@ -202,11 +202,14 @@ export const deleteCrop = async (req, res) => {
 export const getCropsForSale = async (req, res) => {
   try {
     const userId = req.user?.id;
+    const { campaignId } = req.query;
 
     if (!userId) {
-      return res.status(401).json({
-        message: "Usuario no autenticado",
-      });
+      return res.status(401).json({ message: "Usuario no autenticado" });
+    }
+
+    if (!campaignId) {
+      return res.status(400).json({ message: "campaignId es obligatorio" });
     }
 
     const [rows] = await pool.query(
@@ -214,39 +217,57 @@ export const getCropsForSale = async (req, res) => {
       SELECT
         cn.id AS crop_name_id,
         cn.name AS crop_name,
+        cr.campaign_id,
+
+        -- Total cosechado
         SUM(cr.real_yield) AS total_harvested_tn,
-        COALESCE(ss_totals.total_sold_tn, 0) AS total_sold_tn,
-        SUM(cr.real_yield) - COALESCE(ss_totals.total_sold_tn, 0) AS available_tn
-      FROM crop_name cn
-      JOIN crops cr
-        ON cr.crop_name_id = cn.id
-        AND cr.userId = ?
+
+        -- Total entregado (sumando seed_sales que no estén eliminadas)
+        COALESCE(ss_totals.total_delivered_tn, 0) AS total_delivered_tn,
+
+        -- Total vendido (sumando seed_sales que no estén eliminadas)
+        COALESCE(ss_totals.total_sold_tn, 0) AS total_sold_tn
+
+      FROM crops cr
+      JOIN crop_name cn
+        ON cn.id = cr.crop_name_id
+
       LEFT JOIN (
         SELECT
           crop_name_id,
+          campaign_id,
+          SUM(tn_delivered) AS total_delivered_tn,
           SUM(tn_sold) AS total_sold_tn
         FROM seed_sales
         WHERE deleted_at IS NULL
-          AND status != 'canceled'
           AND userId = ?
-        GROUP BY crop_name_id
+        GROUP BY crop_name_id, campaign_id
       ) ss_totals
-        ON ss_totals.crop_name_id = cn.id
-      GROUP BY cn.id, cn.name
-      HAVING available_tn > 0
+        ON ss_totals.crop_name_id = cr.crop_name_id
+       AND ss_totals.campaign_id = cr.campaign_id
+
+      WHERE cr.userId = ?
+        AND cr.campaign_id = ?
+        AND cr.status = 'active'
+
+      GROUP BY cn.id, cn.name, cr.campaign_id
+
+      -- Solo cultivos que tengan cosecha
+      HAVING SUM(cr.real_yield) > 0
+
       ORDER BY cn.name ASC
       `,
-      [userId, userId]
+      [userId, userId, campaignId]
     );
 
     res.json({ crops: rows });
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      message: "Error al obtener cultivos disponibles para venta",
-    });
+    res.status(500).json({ message: "Error al obtener cultivos disponibles para venta" });
   }
 };
+
+
 
 
 

@@ -8,13 +8,13 @@ export const getSeedSales = async (req, res) => {
 
     const { waybill_number = "", destination = "", start_date = "", end_date = "" } = req.query;
 
-    const userId = req.user?.id; // 👈 ID del usuario autenticado
+    const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ message: "Usuario no autenticado" });
     }
 
     let where = "WHERE ss.deleted_at IS NULL AND ss.userId = ?";
-    const values = [userId]; // 👈 agregar userId como primer parámetro
+    const values = [userId];
 
     if (waybill_number) {
       where += " AND ss.waybill_number LIKE ?";
@@ -45,13 +45,15 @@ export const getSeedSales = async (req, res) => {
       `
       SELECT
         ss.*,
+        ss.campaign_id,
+        c.name AS campaign_name,       -- 👈 Traemos nombre de la campaña
         cn.name AS crop_name,
         IF(COUNT(ssd.id) = 0, JSON_ARRAY(), 
           JSON_ARRAYAGG(
             JSON_OBJECT(
               'id', ssd.id,
               'crop_name_id', ssd.crop_name_id, 
-              'waybill_number', ssd.waybill_number,
+              'primary_liquidation_number', ssd.primary_liquidation_number,
               'delivery_date', ssd.delivery_date,
               'destination', ssd.destination,
               'tn_delivered', ssd.tn_delivered,
@@ -64,10 +66,12 @@ export const getSeedSales = async (req, res) => {
       FROM seed_sales ss
       JOIN crop_name cn
         ON cn.id = ss.crop_name_id
+      JOIN campaigns c
+        ON c.id = ss.campaign_id       -- 👈 JOIN con campaigns
       LEFT JOIN seed_sale_deliveries ssd
         ON ssd.seed_sale_id = ss.id AND ssd.deleted_at IS NULL
       ${where}
-      GROUP BY ss.id, cn.name
+      GROUP BY ss.id, cn.name, c.name
       ORDER BY ss.sale_date DESC
       LIMIT ? OFFSET ?
       `,
@@ -102,8 +106,6 @@ export const getSeedSales = async (req, res) => {
 };
 
 
-
-
 export const getSeedSaleById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -133,18 +135,31 @@ export const createOrUpdateSeedSale = async (req, res) => {
 
     const {
       crop_name_id,
+      campaign_id,           // 👈 ahora recibimos campaign_id
       waybill_number,
       sale_date,
       destination,
-      tn_delivered,  // 👈 ahora en toneladas
+      tn_delivered,          // toneladas
       status,
     } = req.body;
 
-    // ✅ Validaciones
-    if (!crop_name_id || !waybill_number || !sale_date || !destination) {
+    // ✅ Validaciones básicas
+    if (!crop_name_id || !campaign_id || !waybill_number || !sale_date || !destination) {
       return res.status(400).json({
         message:
-          "Faltan campos obligatorios: crop_name_id, waybill_number, sale_date, destination",
+          "Faltan campos obligatorios: crop_name_id, campaign_id, waybill_number, sale_date, destination",
+      });
+    }
+
+    // 🔹 Validar que la campaña exista y pertenezca al usuario
+    const [[campaign]] = await pool.query(
+      `SELECT id FROM campaigns WHERE id = ? AND userId = ? AND status = 'active'`,
+      [campaign_id, userId]
+    );
+
+    if (!campaign) {
+      return res.status(400).json({
+        message: "Campaña inválida o no pertenece al usuario",
       });
     }
 
@@ -155,11 +170,12 @@ export const createOrUpdateSeedSale = async (req, res) => {
       // 🔄 UPDATE
       await pool.query(
         `UPDATE seed_sales
-         SET crop_name_id = ?, waybill_number = ?, sale_date = ?, destination = ?,
+         SET crop_name_id = ?, campaign_id = ?, waybill_number = ?, sale_date = ?, destination = ?,
              tn_delivered = ?, status = ?
          WHERE id = ? AND deleted_at IS NULL AND userId = ?`,
         [
           crop_name_id,
+          campaign_id,
           waybill_number,
           sale_date,
           destination,
@@ -173,10 +189,11 @@ export const createOrUpdateSeedSale = async (req, res) => {
       // 🆕 CREATE
       const [result] = await pool.query(
         `INSERT INTO seed_sales
-         (crop_name_id, waybill_number, sale_date, destination, tn_delivered, tn_sold, status, userId)
-         VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+         (crop_name_id, campaign_id, waybill_number, sale_date, destination, tn_delivered, tn_sold, status, userId)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
         [
           crop_name_id,
+          campaign_id,
           waybill_number,
           sale_date,
           destination,
@@ -189,7 +206,7 @@ export const createOrUpdateSeedSale = async (req, res) => {
       seedSaleId = result.insertId;
     }
 
-    // 🔍 Retornar resultado
+    // 🔍 Retornar resultado actualizado
     const [rows] = await pool.query(
       `SELECT * FROM seed_sales WHERE id = ? AND deleted_at IS NULL AND userId = ?`,
       [seedSaleId, userId]
@@ -207,7 +224,6 @@ export const createOrUpdateSeedSale = async (req, res) => {
     });
   }
 };
-
 
 
 export const deleteSeedSale = async (req, res) => {
