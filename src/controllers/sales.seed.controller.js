@@ -7,12 +7,13 @@ export const getSeedSales = async (req, res) => {
     const offset = (page - 1) * limit;
 
     const { waybill_number = "", destination = "", start_date = "", end_date = "" } = req.query;
-
     const userId = req.user?.id;
+
     if (!userId) {
       return res.status(401).json({ message: "Usuario no autenticado" });
     }
 
+    // FILTROS
     let where = "WHERE ss.deleted_at IS NULL AND ss.userId = ?";
     const values = [userId];
 
@@ -39,59 +40,155 @@ export const getSeedSales = async (req, res) => {
     where += " AND ss.status != 'canceled'";
 
     /* ============================
-       QUERY PRINCIPAL
-    ============================ */
-    const [rows] = await pool.query(
-      `
-      SELECT
-        ss.*,
-        ss.campaign_id,
-        c.name AS campaign_name,       -- 👈 Traemos nombre de la campaña
-        cn.name AS crop_name,
-        IF(COUNT(ssd.id) = 0, JSON_ARRAY(), 
-          JSON_ARRAYAGG(
-            JSON_OBJECT(
-              'id', ssd.id,
-              'crop_name_id', ssd.crop_name_id, 
-              'primary_liquidation_number', ssd.primary_liquidation_number,
-              'delivery_date', ssd.delivery_date,
-              'destination', ssd.destination,
-              'tn_delivered', ssd.tn_delivered,
-              'price_per_tn', ssd.price_per_tn,
-              'created_at', ssd.created_at,
-              'updated_at', ssd.updated_at
-            )
-          )
-        ) AS deliveries
-      FROM seed_sales ss
-      JOIN crop_name cn
-        ON cn.id = ss.crop_name_id
-      JOIN campaigns c
-        ON c.id = ss.campaign_id       -- 👈 JOIN con campaigns
-      LEFT JOIN seed_sale_deliveries ssd
-        ON ssd.seed_sale_id = ss.id AND ssd.deleted_at IS NULL
-      ${where}
-      GROUP BY ss.id, cn.name, c.name
-      ORDER BY ss.sale_date DESC
-      LIMIT ? OFFSET ?
-      `,
-      [...values, limit, offset]
-    );
-
-    /* ============================
-       TOTAL PARA PAGINACIÓN
+       TOTAL DE CAMPAÑAS
     ============================ */
     const [[count]] = await pool.query(
       `
-      SELECT COUNT(*) AS total
+      SELECT COUNT(DISTINCT c.id) AS total
       FROM seed_sales ss
+      JOIN campaigns c ON c.id = ss.campaign_id
       ${where}
       `,
       values
     );
 
+    /* ============================
+       CAMPAÑAS PAGINADAS
+    ============================ */
+    const [campaignRows] = await pool.query(
+      `
+      SELECT DISTINCT c.id, c.name
+      FROM seed_sales ss
+      JOIN campaigns c ON c.id = ss.campaign_id
+      ${where}
+      ORDER BY c.name DESC
+      LIMIT ? OFFSET ?
+      `,
+      [...values, limit, offset]
+    );
+
+    const campaignIds = campaignRows.map(c => c.id);
+
+    if (!campaignIds.length) {
+      return res.json({
+        campaigns: [],
+        pagination: {
+          page,
+          limit,
+          total: count.total,
+          totalPages: Math.ceil(count.total / limit),
+        },
+      });
+    }
+
+    /* ============================
+       DATOS COMPLETOS DE ENTREGAS Y VENTAS
+    ============================ */
+    const [rows] = await pool.query(
+      `
+      SELECT
+        ss.id AS seed_sale_id,
+        ss.userId,
+        ss.waybill_number,
+        ss.sale_date,
+        ss.destination,
+        ss.status,
+        ss.tn_sold,
+        ss.tn_delivered,
+        ss.deleted_at,
+        ss.created_at,
+        ss.updated_at,
+        ss.campaign_id,
+        
+        c.name AS campaign_name,
+        cn.id AS crop_name_id,
+        cn.name AS crop_name,
+        
+        ssd.id AS delivery_id,
+        ssd.primary_liquidation_number,
+        ssd.delivery_date,
+        ssd.destination AS delivery_destination,
+        ssd.tn_delivered AS delivery_tn_delivered,
+        ssd.price_per_tn
+      FROM seed_sales ss
+      JOIN campaigns c ON c.id = ss.campaign_id
+      JOIN crop_name cn ON cn.id = ss.crop_name_id
+      LEFT JOIN seed_sale_deliveries ssd
+        ON ssd.seed_sale_id = ss.id
+        AND ssd.deleted_at IS NULL
+      WHERE ss.campaign_id IN (?) AND ss.deleted_at IS NULL
+      ORDER BY c.name, cn.name, ss.sale_date DESC
+      `,
+      [campaignIds]
+    );
+
+    /* ============================
+       AGRUPACIÓN POR CAMPAÑA Y SEED_SALE (ENTREGA)
+    ============================ */
+    const campaignsMap = {};
+
+    for (const row of rows) {
+      if (!campaignsMap[row.campaign_id]) {
+        campaignsMap[row.campaign_id] = {
+          campaign_id: row.campaign_id,
+          campaign_name: row.campaign_name,
+          crops: {},
+        };
+      }
+
+      const campaign = campaignsMap[row.campaign_id];
+
+      // Cada seed_sale es un crop independiente
+      if (!campaign.crops[row.seed_sale_id]) {
+        campaign.crops[row.seed_sale_id] = {
+          id: row.seed_sale_id,
+          userId: row.userId,
+          campaign_id: row.campaign_id,
+          campaign_name: row.campaign_name,
+          crop_name_id: row.crop_name_id,
+          crop_name: row.crop_name,
+          tn_sold: row.tn_sold,
+          tn_delivered: row.tn_delivered,
+          waybill_number: row.waybill_number,
+          destination: row.destination,
+          status: row.status,
+          sale_date: row.sale_date,
+          deleted_at: row.deleted_at,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          deliveries: [],
+        };
+      }
+
+      const crop = campaign.crops[row.seed_sale_id];
+
+      // Cada delivery es una venta
+      if (row.delivery_id) {
+        crop.deliveries.push({
+          id: row.delivery_id,
+          seed_sale_id: row.seed_sale_id,
+          crop_name_id: row.crop_name_id,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          delivery_date: row.delivery_date,
+          destination: row.delivery_destination,
+          tn_delivered: row.delivery_tn_delivered,
+          price_per_tn: row.price_per_tn,
+          primary_liquidation_number: row.primary_liquidation_number,
+        });
+      }
+    }
+
+    const campaigns = Object.values(campaignsMap).map(c => ({
+      ...c,
+      crops: Object.values(c.crops),
+    }));
+
+    /* ============================
+       RESPUESTA FINAL
+    ============================ */
     res.json({
-      seed_sales: rows,
+      campaigns,
       pagination: {
         page,
         limit,
@@ -99,11 +196,14 @@ export const getSeedSales = async (req, res) => {
         totalPages: Math.ceil(count.total / limit),
       },
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Error al obtener ventas" });
   }
 };
+
+
 
 
 export const getSeedSaleById = async (req, res) => {
