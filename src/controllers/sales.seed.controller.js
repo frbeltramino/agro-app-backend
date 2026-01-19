@@ -128,6 +128,7 @@ export const getSeedSales = async (req, res) => {
     const campaignsMap = {};
 
     for (const row of rows) {
+      /* ========= CAMPAÑA ========= */
       if (!campaignsMap[row.campaign_id]) {
         campaignsMap[row.campaign_id] = {
           campaign_id: row.campaign_id,
@@ -138,9 +139,23 @@ export const getSeedSales = async (req, res) => {
 
       const campaign = campaignsMap[row.campaign_id];
 
-      // Cada seed_sale es un crop independiente
-      if (!campaign.crops[row.seed_sale_id]) {
-        campaign.crops[row.seed_sale_id] = {
+      /* ========= CROP ========= */
+      if (!campaign.crops[row.crop_name_id]) {
+        campaign.crops[row.crop_name_id] = {
+          userId: row.userId,
+          campaign_id: row.campaign_id,
+          campaign_name: row.campaign_name,
+          crop_name_id: row.crop_name_id,
+          crop_name: row.crop_name,
+          seed_sales: {},
+        };
+      }
+
+      const crop = campaign.crops[row.crop_name_id];
+
+      /* ========= SEED SALE ========= */
+      if (!crop.seed_sales[row.seed_sale_id]) {
+        crop.seed_sales[row.seed_sale_id] = {
           id: row.seed_sale_id,
           userId: row.userId,
           campaign_id: row.campaign_id,
@@ -160,11 +175,11 @@ export const getSeedSales = async (req, res) => {
         };
       }
 
-      const crop = campaign.crops[row.seed_sale_id];
+      const seedSale = crop.seed_sales[row.seed_sale_id];
 
-      // Cada delivery es una venta
+      /* ========= DELIVERY ========= */
       if (row.delivery_id) {
-        crop.deliveries.push({
+        seedSale.deliveries.push({
           id: row.delivery_id,
           seed_sale_id: row.seed_sale_id,
           crop_name_id: row.crop_name_id,
@@ -179,11 +194,13 @@ export const getSeedSales = async (req, res) => {
       }
     }
 
-    const campaigns = Object.values(campaignsMap).map(c => ({
-      ...c,
-      crops: Object.values(c.crops),
+    const campaigns = Object.values(campaignsMap).map(campaign => ({
+      ...campaign,
+      crops: Object.values(campaign.crops).map(crop => ({
+        ...crop,
+        seed_sales: Object.values(crop.seed_sales),
+      })),
     }));
-
     /* ============================
        RESPUESTA FINAL
     ============================ */
