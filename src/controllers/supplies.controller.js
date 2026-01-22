@@ -181,9 +181,9 @@ export const createOrUpdateSupply = async (req, res) => {
     }
 
     const finalUnit = unit || "kg";
-    const finalDose = dose_per_ha ? Number(dose_per_ha) : 0;
-    const finalHectares = hectares ? Number(hectares) : 0;
-    const finalPrice = price_per_unit ? Number(price_per_unit) : 0;
+    const finalDose = dose_per_ha ?? null;
+    const finalHectares = hectares ?? null;
+    const finalPrice = price_per_unit ?? null;
     const finalStatus = status || "active";
 
     let supplyId = id;
