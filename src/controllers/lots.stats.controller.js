@@ -1,9 +1,17 @@
 import { pool } from "../db/connection.js";
 
+import {
+  emptyLot,
+} from "../utils/lotsStats.utils.js";
+
+
+const DEFAULTS = {
+  PRECIO_POR_UNIDAD: 0,
+  COSTO_VARIABLE: 0,
+  MARGEN_BRUTO: 100,
+};
 
 export const getLotsStats = async (req, res) => {
-  const precio_por_unidad__default = 100;
-  const costoVariable_default = 150;
   try {
     const userId = req.user?.id;
     const campaignId = req.query.campaign_id;
@@ -12,125 +20,134 @@ export const getLotsStats = async (req, res) => {
       return res.status(400).json({ message: "campaign_id es requerido" });
     }
 
-    // 1️⃣ Traer todos los lotes de la campaña
-    const [lots] = await pool.query(
-      `SELECT id, name, hectares 
-       FROM lots 
-       WHERE campaign_id = ?`,
-      [campaignId]
-    );
+    const lots = await getLotsByCampaign(pool, campaignId);
+    if (!lots.length) return res.json({ lotes: [] });
 
-    if (!lots.length) return res.json([]);
-
-    // 2️⃣ Traer cultivos activos de esos lotes para el usuario
-    const lotIds = lots.map((lot) => lot.id);
-    const [crops] = await pool.query(
-      `SELECT id, lot_id, real_yield, total_estimated
-FROM crops
-WHERE lot_id IN (?) AND userId = ? AND status = 'active'`,
-      [lotIds, userId]
-    );
-
+    const lotIds = lots.map(l => l.id);
+    const crops = await getActiveCropsByLots(pool, lotIds, userId);
     if (!crops.length) {
-      const emptyLots = lots.map((lot) => ({
-        id: lot.id,
-        lote: lot.name,
-        superficieHa: Number(lot.hectares),
-        insumos: 0,
-        labores: 0,
-        cosecha: 0,
-        costoVariable: 0,
-        margenBruto: 0,
-      }));
-      return res.json({ lotes: emptyLots });
+      return res.json({ lotes: lots.map(emptyLot) });
     }
 
-    // 3️⃣ Traer relaciones crop_tasks para obtener task_id
-    const cropIds = crops.map((c) => c.id);
-    const [cropTaskRelations] = await pool.query(
-      `SELECT id, crop_id, task_id 
-       FROM crop_tasks 
-       WHERE crop_id IN (?)`,
-      [cropIds]
-    );
-
-    if (!cropTaskRelations.length) {
-      const lotsWithZero = lots.map((lot) => ({
-        id: lot.id,
-        lote: lot.name,
-        superficieHa: Number(lot.hectares),
-        insumos: 0,
-        labores: 0,
-        cosecha: 0,
-        costoVariable: 0,
-        margenBruto: 0,
-      }));
-      return res.json({ lotes: lotsWithZero });
+    const cropIds = crops.map(c => c.id);
+    const cropTasks = await getCropTasks(pool, cropIds);
+    if (!cropTasks.length) {
+      return res.json({ lotes: lots.map(emptyLot) });
     }
 
-    // 4️⃣ Traer datos de las tareas reales
-    const taskIds = cropTaskRelations.map((ct) => ct.task_id);
-    const [tasks] = await pool.query(
-      `SELECT id, crop_id, laborCost, total_price 
-       FROM tasks 
-       WHERE id IN (?) AND status = 'active'`,
-      [taskIds]
+    const taskIds = cropTasks.map(ct => ct.task_id);
+    const [tasks, supplies] = await Promise.all([
+      getTasks(pool, taskIds),
+      getSupplies(pool, taskIds),
+    ]);
+
+    const lotStats = lots.map(lot =>
+      calculateLotStats({
+        lot,
+        crops,
+        tasks,
+        supplies,
+        defaults: DEFAULTS,
+      })
     );
 
-    // 5️⃣ Traer insumos de todas las tareas
-    const [supplies] = await pool.query(
-      `SELECT task_id, total_used, price_per_unit 
-       FROM task_supplies 
-       WHERE task_id IN (?)`,
-      [taskIds]
-    );
+    res.json({ lotes: lotStats });
 
-    // 6️⃣ Mapear costos por lote
-    const lotStats = lots.map((lot) => {
-      const cropsInLot = crops.filter((c) => c.lot_id === lot.id);
-      const tasksInLot = tasks.filter((t) => cropsInLot.some((c) => c.id === t.crop_id));
-      const suppliesInLot = supplies.filter((s) => tasksInLot.some((t) => t.id === s.task_id));
-
-      const totalInsumos = suppliesInLot.reduce(
-        (sum, s) => sum + (s.total_used || 0) * (s.price_per_unit || 0),
-        0
-      );
-
-      const totalLabores = tasksInLot.reduce(
-        (sum, t) => sum + (t.laborCost || 0),
-        0
-      );
-
-      const totalCosecha = cropsInLot.reduce((sum, crop) => sum + (crop.real_yield || 0), 0);
-
-      const ingresos = cropsInLot.reduce((sum, crop) => {
-        if (crop.real_yield !== null) {
-          return sum + crop.real_yield * precio_por_unidad__default;
-        }
-        return sum;
-      }, 0);
-
-      // Costo variable por tonelada cosechada
-      const costoVariableReal = costoVariable_default;
-
-      const margenBruto = ingresos - (totalInsumos + totalLabores + costoVariableReal);
-
-      return {
-        id: lot.id,
-        lote: lot.name,
-        superficieHa: Number(lot.hectares.toFixed(2)),
-        insumos: Number(totalInsumos.toFixed(2)),
-        labores: Number(totalLabores.toFixed(2)),
-        cosecha: Number(totalCosecha.toFixed(2)),
-        costoVariable: Number(costoVariable_default.toFixed(2)),
-        margenBruto: Number(margenBruto.toFixed(2)),
-      };
-    });
-
-    return res.json({ lotes: lotStats });
-
-  } catch (err) {
-    console.error(err);
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Error al obtener estadísticas de lotes" });
   }
+};
+
+
+export const getLotsByCampaign = async (pool, campaignId) => {
+  const [rows] = await pool.query(
+    `SELECT id, name, hectares 
+     FROM lots 
+     WHERE campaign_id = ?`,
+    [campaignId]
+  );
+  return rows;
+};
+
+export const getActiveCropsByLots = async (pool, lotIds, userId) => {
+  const [rows] = await pool.query(
+    `SELECT id, lot_id, real_yield
+     FROM crops
+     WHERE lot_id IN (?) AND userId = ? AND status = 'active'`,
+    [lotIds, userId]
+  );
+  return rows;
+};
+
+export const getCropTasks = async (pool, cropIds) => {
+  const [rows] = await pool.query(
+    `SELECT crop_id, task_id 
+     FROM crop_tasks 
+     WHERE crop_id IN (?)`,
+    [cropIds]
+  );
+  return rows;
+};
+
+export const getTasks = async (pool, taskIds) => {
+  const [rows] = await pool.query(
+    `SELECT id, crop_id, laborCost
+     FROM tasks 
+     WHERE id IN (?) AND status = 'active'`,
+    [taskIds]
+  );
+  return rows;
+};
+
+export const getSupplies = async (pool, taskIds) => {
+  const [rows] = await pool.query(
+    `SELECT task_id, total_used, price_per_unit
+     FROM task_supplies 
+     WHERE task_id IN (?)`,
+    [taskIds]
+  );
+  return rows;
+};
+
+export const calculateLotStats = ({
+  lot,
+  crops,
+  tasks,
+  supplies,
+  defaults,
+}) => {
+  const cropsInLot = crops.filter(c => c.lot_id === lot.id);
+  const tasksInLot = tasks.filter(t =>
+    cropsInLot.some(c => c.id === t.crop_id)
+  );
+  const suppliesInLot = supplies.filter(s =>
+    tasksInLot.some(t => t.id === s.task_id)
+  );
+
+  const insumos = suppliesInLot.reduce(
+    (sum, s) => sum + (s.total_used || 0) * (s.price_per_unit || 0),
+    0
+  );
+
+  const labores = tasksInLot.reduce(
+    (sum, t) => sum + (t.laborCost || 0),
+    0
+  );
+
+  const cosecha = cropsInLot.reduce(
+    (sum, c) => sum + (c.real_yield || 0),
+    0
+  );
+
+  return {
+    id: lot.id,
+    lote: lot.name,
+    superficieHa: Number(lot.hectares.toFixed(2)),
+    insumos: Number(insumos.toFixed(2)),
+    labores: Number(labores.toFixed(2)),
+    cosecha: Number(cosecha.toFixed(2)),
+    costoVariable: defaults.COSTO_VARIABLE,
+    margenBruto: defaults.MARGEN_BRUTO,
+  };
 };
