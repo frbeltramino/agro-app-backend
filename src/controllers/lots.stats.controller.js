@@ -7,7 +7,7 @@ import {
 
 const DEFAULTS = {
   PRECIO_POR_UNIDAD: 0,
-  COSTO_VARIABLE: 0,
+  COSTO_VARIABLE: 100,
   MARGEN_BRUTO: 100,
 };
 
@@ -102,13 +102,37 @@ export const getTasks = async (pool, taskIds) => {
 
 export const getSupplies = async (pool, taskIds) => {
   const [rows] = await pool.query(
-    `SELECT task_id, total_used, price_per_unit
-     FROM task_supplies 
-     WHERE task_id IN (?)`,
+    `
+    SELECT 
+      ts.task_id,
+      ts.total_used,
+      ts.price_per_unit,
+
+      COALESCE(sc_supply.id, sc_stock.id)   AS category_id,
+      COALESCE(sc_supply.name, sc_stock.name, 'Sin categoría') AS category_name
+
+    FROM task_supplies ts
+
+    LEFT JOIN supplies s 
+      ON s.id = ts.supply_id
+
+    LEFT JOIN stock st 
+      ON st.id = ts.stock_id
+
+    LEFT JOIN supply_category sc_supply 
+      ON sc_supply.id = s.category_id
+
+    LEFT JOIN supply_category sc_stock 
+      ON sc_stock.id = st.category_id
+
+    WHERE ts.task_id IN (?)
+    `,
     [taskIds]
   );
+
   return rows;
 };
+
 
 export const calculateLotStats = ({
   lot,
@@ -125,13 +149,33 @@ export const calculateLotStats = ({
     tasksInLot.some(t => t.id === s.task_id)
   );
 
-  const insumos = suppliesInLot.reduce(
-    (sum, s) => sum + (s.total_used || 0) * (s.price_per_unit || 0),
-    0
-  );
+  const insumosPorCategoriaMap = suppliesInLot.reduce((acc, s) => {
+    const categoria = s.category_name || "Sin categoría";
+    const costo = (s.total_used || 0) * (s.price_per_unit || 0);
+
+    if (!acc[categoria]) {
+      acc[categoria] = 0;
+    }
+
+    acc[categoria] += costo;
+
+    return acc;
+  }, {});
 
   const labores = tasksInLot.reduce(
     (sum, t) => sum + (t.laborCost || 0),
+    0
+  );
+
+  const insumosPorCategoria = Object.entries(insumosPorCategoriaMap).map(
+    ([categoria, total]) => ({
+      categoria,
+      total: Number(total.toFixed(2)),
+    })
+  );
+
+  const insumosTotal = insumosPorCategoria.reduce(
+    (sum, i) => sum + i.total,
     0
   );
 
@@ -144,7 +188,10 @@ export const calculateLotStats = ({
     id: lot.id,
     lote: lot.name,
     superficieHa: Number(lot.hectares.toFixed(2)),
-    insumos: Number(insumos.toFixed(2)),
+
+    insumos: Number(insumosTotal.toFixed(2)),
+    insumosPorCategoria, // 👈 array siempre
+
     labores: Number(labores.toFixed(2)),
     cosecha: Number(cosecha.toFixed(2)),
     costoVariable: defaults.COSTO_VARIABLE,
