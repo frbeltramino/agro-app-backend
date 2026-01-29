@@ -593,3 +593,90 @@ MODIFY dose_per_ha DECIMAL(10,3) NULL DEFAULT NULL,
 MODIFY hectares DECIMAL(10,3) NULL DEFAULT NULL,
 MODIFY total_used DECIMAL(10,3) NULL DEFAULT NULL,
 MODIFY price_per_unit DECIMAL(10,3) NULL DEFAULT NULL;
+
+/*24/01 */
+
+ALTER TABLE seed_sale_deliveries
+DROP FOREIGN KEY fk_ssd_seed_sale;
+
+RENAME TABLE seed_sales TO seed_deliveries;
+
+RENAME TABLE seed_sale_deliveries TO seed_sales;
+
+ALTER TABLE seed_sales
+ADD CONSTRAINT fk_seed_sales_delivery
+FOREIGN KEY (seed_sale_id)
+REFERENCES seed_deliveries (id)
+ON UPDATE CASCADE
+ON DELETE CASCADE;
+
+ALTER TABLE seed_sales
+DROP FOREIGN KEY fk_seed_sales_delivery;
+
+ALTER TABLE seed_sales
+DROP INDEX idx_seed_sale;
+
+ALTER TABLE seed_sales
+RENAME COLUMN seed_sale_id TO seed_delivery_id;
+
+ALTER TABLE seed_sales
+ADD INDEX idx_seed_delivery (seed_delivery_id);
+
+ALTER TABLE seed_sales
+ADD CONSTRAINT fk_seed_sales_delivery
+FOREIGN KEY (seed_delivery_id)
+REFERENCES seed_deliveries (id)
+ON UPDATE CASCADE
+ON DELETE CASCADE;
+
+ALTER TABLE seed_deliveries
+DROP INDEX idx_sale_date;
+
+ALTER TABLE seed_deliveries
+RENAME COLUMN sale_date TO delivery_date;
+
+ALTER TABLE seed_deliveries
+ADD INDEX idx_delivery_date (delivery_date);
+
+ALTER TABLE seed_sales
+DROP INDEX idx_delivery_date;
+
+ALTER TABLE seed_sales
+RENAME COLUMN delivery_date TO sale_date;
+
+ALTER TABLE seed_sales
+ADD INDEX idx_sale_date (sale_date);
+
+ALTER TABLE seed_sales
+RENAME COLUMN tn_delivered TO tn_sold;
+
+ALTER TABLE seed_sales
+DROP FOREIGN KEY fk_seed_sales_delivery;
+
+ALTER TABLE seed_sales
+DROP INDEX idx_seed_delivery;
+
+ALTER TABLE seed_sales
+DROP COLUMN seed_delivery_id;
+
+ALTER TABLE seed_sales
+ADD COLUMN campaign_id INT NULL AFTER userId;
+
+ALTER TABLE seed_sales
+ADD INDEX idx_campaign (campaign_id);
+
+ALTER TABLE seed_sales
+ADD CONSTRAINT fk_seed_sales_campaign_id
+FOREIGN KEY (campaign_id)
+REFERENCES campaigns(id)
+ON UPDATE CASCADE
+ON DELETE SET NULL;
+
+ALTER TABLE seed_sales
+MODIFY COLUMN tn_sold DECIMAL(10,3) NOT NULL;
+
+ALTER TABLE seed_deliveries
+MODIFY COLUMN tn_delivered DECIMAL(10,3) NOT NULL DEFAULT '0.000';
+
+ALTER TABLE seed_deliveries
+MODIFY COLUMN tn_sold DECIMAL(10,3) NOT NULL DEFAULT '0.000';

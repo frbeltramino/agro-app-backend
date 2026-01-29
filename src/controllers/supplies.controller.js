@@ -247,13 +247,13 @@ export const createOrUpdateSupply = async (req, res) => {
 
       const quantity = finalDose * finalHectares;
 
-      await pool.query(
-        `
-        INSERT INTO crop_supplies (crop_id, supply_id, quantity)
-        VALUES (?, ?, ?)
-        `,
-        [crop_id, supplyId, quantity]
-      );
+      // await pool.query(
+      //   `
+      //   INSERT INTO crop_supplies (crop_id, supply_id, quantity)
+      //   VALUES (?, ?, ?)
+      //   `,
+      //   [crop_id, supplyId, quantity]
+      // );
     }
 
     /* =========================
@@ -333,13 +333,13 @@ export const deleteSupply = async (req, res) => {
         [supply_id]
       );
 
-      // 5️⃣ Eliminar relación en crop_supplies si existe
-      if (crop_supply_id) {
-        await pool.query(
-          `DELETE FROM crop_supplies WHERE id = ?`,
-          [crop_supply_id]
-        );
-      }
+      // // 5️⃣ Eliminar relación en crop_supplies si existe
+      // if (crop_supply_id) {
+      //   await pool.query(
+      //     `DELETE FROM crop_supplies WHERE id = ?`,
+      //     [crop_supply_id]
+      //   );
+      // }
 
       return res.json({ message: "Insumo eliminado correctamente y costos actualizados" });
     }

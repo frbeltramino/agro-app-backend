@@ -1,5 +1,5 @@
 import express from "express";
-import { getCrops, getCropById, getCropsByLotId, createOrUpdateCrop, deleteCrop, getCropsForSale } from "../controllers/crops.controller.js";
+import { getCrops, getCropById, getCropsByLotId, createOrUpdateCrop, deleteCrop, getCropsForSale, getCropSoldAvailability } from "../controllers/crops.controller.js";
 import { authorizeRoles, validateJWT } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -9,6 +9,9 @@ router.get("/",
   getCropsForSale);
 router.get("/:id", getCropById);
 router.get("/lot/:lotId", getCropsByLotId);
+router.get("/sale/availability",
+  validateJWT,
+  getCropSoldAvailability);
 router.post("/new",
   validateJWT,
   authorizeRoles("admin"),
