@@ -41,6 +41,8 @@ export const getLotsStats = async (req, res) => {
       getSupplies(pool, taskIds),
     ]);
 
+    const cropPricesMap = await getAverageSalePricePerCrop(pool, campaignId, userId);
+
     const lotStats = lots.map(lot =>
       calculateLotStats({
         lot,
@@ -48,6 +50,7 @@ export const getLotsStats = async (req, res) => {
         tasks,
         supplies,
         defaults: DEFAULTS,
+        cropPricesMap,
       })
     );
 
@@ -64,7 +67,7 @@ export const getLotsByCampaign = async (pool, campaignId) => {
   const [rows] = await pool.query(
     `SELECT id, name, hectares 
      FROM lots 
-     WHERE campaign_id = ?`,
+     WHERE campaign_id = ? AND status = 'active'`,
     [campaignId]
   );
   return rows;
@@ -72,13 +75,13 @@ export const getLotsByCampaign = async (pool, campaignId) => {
 
 export const getActiveCropsByLots = async (pool, lotIds, userId) => {
   const [rows] = await pool.query(
-    `SELECT id, lot_id, real_yield
+    `SELECT id, lot_id, crop_name_id, real_yield
      FROM crops
      WHERE lot_id IN (?) AND userId = ? AND status = 'active'`,
     [lotIds, userId]
   );
   return rows;
-};
+}
 
 export const getCropTasks = async (pool, cropIds) => {
   const [rows] = await pool.query(
@@ -133,6 +136,27 @@ export const getSupplies = async (pool, taskIds) => {
   return rows;
 };
 
+export const getAverageSalePricePerCrop = async (pool, campaignId, userId) => {
+  const [rows] = await pool.query(
+    `SELECT 
+        crop_name_id,
+        SUM(tn_sold * price_per_tn) / SUM(tn_sold) AS avg_price_per_tn
+     FROM seed_sales
+     WHERE campaign_id = ? 
+       AND userId = ?
+       AND deleted_at IS NULL
+     GROUP BY crop_name_id`,
+    [campaignId, userId]
+  );
+
+  // Devuelve un objeto { [crop_name_id]: avg_price }
+  const pricesMap = {};
+  for (const row of rows) {
+    pricesMap[row.crop_name_id] = row.avg_price_per_tn;
+  }
+  return pricesMap;
+};
+
 
 export const calculateLotStats = ({
   lot,
@@ -140,6 +164,7 @@ export const calculateLotStats = ({
   tasks,
   supplies,
   defaults,
+  cropPricesMap,
 }) => {
   const cropsInLot = crops.filter(c => c.lot_id === lot.id);
   const tasksInLot = tasks.filter(t =>
@@ -184,6 +209,22 @@ export const calculateLotStats = ({
     0
   );
 
+  const ingresos = cropsInLot.reduce((sum, c) => {
+    const precio = cropPricesMap[c.crop_name_id] || defaults.PRECIO_POR_UNIDAD;
+    return sum + (c.real_yield || 0) * precio;
+  }, 0);
+
+  const preciosDelLote = cropsInLot
+    .map(c => {
+      if (!c.crop_name_id) return null;
+      return cropPricesMap[c.crop_name_id];
+    })
+    .filter(p => typeof p === "number");
+
+  const precioPromedio = preciosDelLote.length
+    ? preciosDelLote.reduce((a, b) => a + b, 0) / preciosDelLote.length
+    : defaults.PRECIO_POR_UNIDAD;
+
   return {
     id: lot.id,
     lote: lot.name,
@@ -194,6 +235,8 @@ export const calculateLotStats = ({
 
     labores: Number(labores.toFixed(2)),
     cosecha: Number(cosecha.toFixed(2)),
+    ingresos: Number(ingresos.toFixed(2)),
+    precioPromedio: Number(precioPromedio.toFixed(2)),
     costoVariable: defaults.COSTO_VARIABLE,
     margenBruto: defaults.MARGEN_BRUTO,
   };
