@@ -15,12 +15,13 @@ import cropNamesRoutes from "./src/routes/crop.names.routes.js";
 import stockRoutes from "./src/routes/stock.routes.js";
 import taskTypesRoutes from "./src/routes/task.types.routes.js";
 import stockStatsRoutes from "./src/routes/stock.stats.routes.js";
-import seedSalesRoutes from "./src/routes/sales.seed.routes.js";
+import seedDeliveriesRoutes from "./src/routes/deliveries.seed.routes.js";
 import cropStockRoutes from "./src/routes/crop.stock.routes.js";
-import seedSaleDeliveries from "./src/routes/seedSaleDeliveries.routes.js";
+import seedSalesRoutes from "./src/routes/sales.seed.routes.js";
 import supplyMasterRoutes from "./src/routes/supply.master.routes.js";
 import contractorsRoutes from "./src/routes/providers.routes.js";
 import lotsStatsRoutes from "./src/routes/lots.stats.routes.js";
+import seedMovementsRoutes from "./src/routes/deliveries.sales.seed.js";
 
 
 dotenv.config();
@@ -45,9 +46,12 @@ app.use('/api/crop/names', cropNamesRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/task/types', taskTypesRoutes);
 app.use('/api/stats/stock', stockStatsRoutes);
+
+app.use('/api/deliveries/seed', seedDeliveriesRoutes);
 app.use('/api/sales/seed', seedSalesRoutes);
+app.use('/api/seed/movements', seedMovementsRoutes);
+
 app.use('/api/crop/stock', cropStockRoutes);
-app.use('/api/deliveries/seed', seedSaleDeliveries);
 app.use('/api/master/supplies', supplyMasterRoutes);
 app.use('/api/providers', contractorsRoutes);
 app.use('/api/lots-stats', lotsStatsRoutes);

@@ -1,24 +1,23 @@
 import express from "express";
 import {
-  createOrUpdateSeedSale,
-  deleteSeedSale,
-} from "../controllers/sales.seed.controller.js";
+  createOrUpdateSeedDelivery,
+  deleteSeedDelivery
+} from "../controllers/deliveries.seed.controller.js";
 import { authorizeRoles, validateJWT } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-
 router.post("/new",
   validateJWT,
   authorizeRoles("admin"),
-  createOrUpdateSeedSale);
+  createOrUpdateSeedDelivery);
 router.patch("/:id",
   validateJWT,
   authorizeRoles("admin"),
-  createOrUpdateSeedSale);
+  createOrUpdateSeedDelivery);
 router.delete("/:id",
   validateJWT,
   authorizeRoles("admin"),
-  deleteSeedSale);
+  deleteSeedDelivery);
 
 export default router;
