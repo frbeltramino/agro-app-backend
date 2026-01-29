@@ -95,35 +95,38 @@ export const getSeedDeliveriesAndSales = async (req, res) => {
     ============================ */
     const [deliveries] = await pool.query(
       `
-  SELECT
-    sd.id AS seed_delivery_id,
-    sd.userId,
-    sd.campaign_id,
-    c.name AS campaign_name,
-    sd.crop_name_id,
-    cn.name AS crop_name,
-    sd.tn_sold,
-    sd.tn_delivered,
-    sd.waybill_number,
-    sd.destination,
-    sd.status,
-    sd.delivery_date,
-    sd.deleted_at,
-    sd.created_at,
-    sd.updated_at
-  FROM seed_deliveries sd
-  JOIN campaigns c ON c.id = sd.campaign_id
-  JOIN crop_name cn ON cn.id = sd.crop_name_id
-  JOIN crops cr
-    ON cr.crop_name_id = sd.crop_name_id
-   AND cr.campaign_id = sd.campaign_id
-   AND cr.userId = sd.userId
-   AND cr.status = 'active'
-  WHERE sd.campaign_id IN (?)
-    AND sd.deleted_at IS NULL
-    AND sd.status != 'canceled'
-    AND sd.userId = ?
-  `,
+      SELECT
+        sd.id AS seed_delivery_id,
+        sd.userId,
+        sd.campaign_id,
+        c.name AS campaign_name,
+        sd.crop_name_id,
+        cn.name AS crop_name,
+        sd.tn_sold,
+        sd.tn_delivered,
+        sd.waybill_number,
+        sd.destination,
+        sd.status,
+        sd.delivery_date,
+        sd.deleted_at,
+        sd.created_at,
+        sd.updated_at
+      FROM seed_deliveries sd
+      JOIN campaigns c ON c.id = sd.campaign_id
+      JOIN crop_name cn ON cn.id = sd.crop_name_id
+      WHERE sd.campaign_id IN (?)
+        AND sd.deleted_at IS NULL
+        AND sd.status != 'canceled'
+        AND sd.userId = ?
+        AND EXISTS (
+          SELECT 1
+          FROM crops cr
+          WHERE cr.crop_name_id = sd.crop_name_id
+            AND cr.campaign_id = sd.campaign_id
+            AND cr.userId = sd.userId
+            AND cr.status = 'active'
+        )
+      `,
       [campaignIds, userId]
     );
 
