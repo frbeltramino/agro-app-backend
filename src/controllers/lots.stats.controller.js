@@ -7,8 +7,8 @@ import {
 
 const DEFAULTS = {
   PRECIO_POR_UNIDAD: 0,
-  COSTO_VARIABLE: 100,
-  MARGEN_BRUTO: 100,
+  COSTO_VARIABLE: 0,
+  MARGEN_BRUTO: 0,
 };
 
 export const getLotsStats = async (req, res) => {
