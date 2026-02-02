@@ -683,3 +683,10 @@ MODIFY COLUMN tn_sold DECIMAL(10,3) NOT NULL DEFAULT '0.000';
 
 ALTER TABLE stock
 MODIFY quantity_available DECIMAL(10,3) NOT NULL DEFAULT 0.000;
+
+ALTER TABLE crop_stock
+  MODIFY used_quantity DECIMAL(10,3) NULL DEFAULT 0.000,
+  MODIFY dose_per_ha DECIMAL(10,3) NULL DEFAULT 0.000;
+
+
+/*https://excalidraw.com/#json=0HLgoHOiC_RIcO0wCQ9t-,Rm9ZEE3JuSP4bNUUDSMhtg*/
