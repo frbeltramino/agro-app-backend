@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.get("/", getLots);
 router.get("/campaign/:campaignId", getLotsByCampaign);
+
 router.get("/:id", getLotById);
 router.post("/new",
   validateJWT,
