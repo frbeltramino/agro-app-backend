@@ -26,6 +26,7 @@ DROP TABLE IF EXISTS task_types;
 DROP TABLE IF EXISTS lot_master;
 DROP TABLE IF EXISTS providers;
 
+DROP TABLE IF EXISTS expense_types;
 -- ============================================================
 -- TABLAS BASE
 -- ============================================================
@@ -683,3 +684,65 @@ MODIFY COLUMN tn_sold DECIMAL(10,3) NOT NULL DEFAULT '0.000';
 
 ALTER TABLE stock
 MODIFY quantity_available DECIMAL(10,3) NOT NULL DEFAULT 0.000;
+
+ALTER TABLE crop_stock
+  MODIFY used_quantity DECIMAL(10,3) NULL DEFAULT 0.000,
+  MODIFY dose_per_ha DECIMAL(10,3) NULL DEFAULT 0.000;
+
+
+/*https://excalidraw.com/#json=0HLgoHOiC_RIcO0wCQ9t-,Rm9ZEE3JuSP4bNUUDSMhtg*/
+
+CREATE TABLE `expense_types` (
+	`id` INT NOT NULL AUTO_INCREMENT,
+	`name` VARCHAR(100) NOT NULL COLLATE 'utf8mb4_0900_ai_ci',
+	`user_id` INT NULL DEFAULT NULL,
+	`created_at` TIMESTAMP NULL DEFAULT (CURRENT_TIMESTAMP),
+	PRIMARY KEY (`id`) USING BTREE,
+	INDEX `fk_expense_types_user` (`user_id`) USING BTREE,
+	CONSTRAINT `fk_expense_types_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+)
+COLLATE='utf8mb4_0900_ai_ci'
+ENGINE=InnoDB
+;
+
+CREATE TABLE variable_expenses (
+    id INT NOT NULL AUTO_INCREMENT,
+
+    user_id INT NOT NULL,
+    campaign_id INT NOT NULL,
+    lot_id INT NOT NULL,
+
+    hectares DECIMAL(10,2) NOT NULL,
+    tons_harvested DECIMAL(10,2) NULL COMMENT 'tnCosechadas / real_yield',
+
+    expense_type_id INT NOT NULL,
+
+    provider VARCHAR(150) NULL COMMENT 'Prestador',
+
+    expense_date DATE NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    INDEX idx_variable_expenses_user (user_id),
+    INDEX idx_variable_expenses_campaign (campaign_id),
+    INDEX idx_variable_expenses_lot (lot_id),
+    INDEX idx_variable_expenses_type (expense_type_id),
+
+    CONSTRAINT fk_variable_expenses_user
+        FOREIGN KEY (user_id) REFERENCES users(id),
+
+    CONSTRAINT fk_variable_expenses_campaign
+        FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
+
+    CONSTRAINT fk_variable_expenses_lot
+        FOREIGN KEY (lot_id) REFERENCES lots(id),
+
+    CONSTRAINT fk_variable_expenses_type
+        FOREIGN KEY (expense_type_id) REFERENCES expense_types(id)
+)
+ENGINE=InnoDB;
