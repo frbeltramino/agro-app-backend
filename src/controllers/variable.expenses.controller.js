@@ -66,7 +66,7 @@ export const getVariableExpenses = async (req, res) => {
     const groupedByLot = lots.map(lot => {
       const lotExpenses = expenses
         .filter(e => e.lot_id === lot.lot_id)
-        .map(e => ({ ...e, lotName: lot.lot_name })); // ✅ agregamos lotName a cada gasto
+        .map(e => ({ ...e, lotName: lot.lot_name }));
 
       return {
         lotId: lot.lot_id,
