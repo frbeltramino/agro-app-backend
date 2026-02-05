@@ -6,73 +6,107 @@ import { pool } from "../db/connection.js";
 export const getVariableExpenses = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { campaignId, lotId, page = "1" } = req.query;
+    const { campaignId, page = "1" } = req.query;
 
-    const pageNumber = Math.max(1, parseInt(page)); // aseguramos que sea >= 1
-    const pageSize = 10; // 10 registros por página
+    const pageNumber = Math.max(1, parseInt(page, 10));
+    const pageSize = 5; // cantidad de LOTES por página
     const offset = (pageNumber - 1) * pageSize;
 
-    let query = `
-  SELECT ve.*, et.name AS expense_type_name
-  FROM variable_expenses ve
-  LEFT JOIN expense_types et 
-    ON ve.expense_type_id = et.id
-  WHERE ve.user_id = ?
-    AND ve.deleted_at IS NULL
-`;
-    const params = [userId];
+    /* ======================================================
+       1️⃣ Obtener lotes paginados con nombre
+    ====================================================== */
+    const lotParams = [userId];
+    let lotQuery = `
+      SELECT DISTINCT ve.lot_id, l.name AS lot_name
+      FROM variable_expenses ve
+      INNER JOIN lots l ON ve.lot_id = l.id
+      WHERE ve.user_id = ?
+        AND ve.deleted_at IS NULL
+    `;
 
     if (campaignId) {
-      query += ` AND ve.campaign_id = ?`;
-      params.push(Number(campaignId));
+      lotQuery += ` AND ve.campaign_id = ?`;
+      lotParams.push(Number(campaignId));
     }
 
-    if (lotId) {
-      query += ` AND ve.lot_id = ?`;
-      params.push(Number(lotId));
+    lotQuery += `
+      ORDER BY ve.lot_id
+      LIMIT ? OFFSET ?
+    `;
+    lotParams.push(pageSize, offset);
+
+    const [lots] = await pool.query(lotQuery, lotParams);
+    const lotIds = lots.map(l => l.lot_id);
+
+    /* ======================================================
+       2️⃣ Obtener gastos de esos lotes
+    ====================================================== */
+    let expenses = [];
+    if (lotIds.length > 0) {
+      const [rows] = await pool.query(
+        `
+        SELECT 
+          ve.*,
+          et.name AS expense_type_name
+        FROM variable_expenses ve
+        LEFT JOIN expense_types et ON ve.expense_type_id = et.id
+        WHERE ve.user_id = ?
+          AND ve.deleted_at IS NULL
+          AND ve.lot_id IN (?)
+        ORDER BY ve.lot_id ASC, ve.expense_date DESC
+        `,
+        [userId, lotIds]
+      );
+      expenses = rows;
     }
 
-    query += `
-  ORDER BY
-    ve.expense_date DESC,
-    et.name ASC
-  LIMIT ? OFFSET ?
-`;
-    params.push(pageSize, offset);
-    params.push(pageSize, offset);
+    /* ======================================================
+       3️⃣ Agrupar gastos por lote, incluyendo nombre
+    ====================================================== */
+    const groupedByLot = lots.map(lot => ({
+      lotId: lot.lot_id,
+      lotName: lot.lot_name,  // ✅ nombre del lote
+      expenses: expenses.filter(e => e.lot_id === lot.lot_id)
+    }));
 
-    const [rows] = await pool.query(query, params);
-
-    // Contar total de registros para paginación
-    let totalCountQuery = `
-      SELECT COUNT(*) AS total
+    /* ======================================================
+       4️⃣ Contar total de lotes para paginación
+    ====================================================== */
+    const countParams = [userId];
+    let countQuery = `
+      SELECT COUNT(DISTINCT lot_id) AS total
       FROM variable_expenses
       WHERE user_id = ?
         AND deleted_at IS NULL
     `;
-    const countParams = [userId];
-    if (campaignId) countParams.push(Number(campaignId));
-    if (lotId) countParams.push(Number(lotId));
+    if (campaignId) {
+      countQuery += ` AND campaign_id = ?`;
+      countParams.push(Number(campaignId));
+    }
+    const [countRows] = await pool.query(countQuery, countParams);
+    const totalLots = countRows[0].total;
 
-    const [countRows] = await pool.query(totalCountQuery, countParams);
-    const total = countRows[0].total;
-
+    /* ======================================================
+       5️⃣ Respuesta final
+    ====================================================== */
     res.status(200).json({
-      variableExpenses: rows,
+      data: groupedByLot,
       pagination: {
         page: pageNumber,
         pageSize,
-        total,
-        totalPages: Math.ceil(total / pageSize),
-      },
+        total: totalLots,
+        totalPages: Math.ceil(totalLots / pageSize)
+      }
     });
+
   } catch (error) {
-    console.error("getVariableExpenses error:", error);
+    console.error("getVariableExpensesGroupedByLot error:", error);
     res.status(500).json({
-      message: "Error al obtener gastos variables",
+      message: "Error al obtener gastos variables agrupados por lote"
     });
   }
 };
+
 
 
 
