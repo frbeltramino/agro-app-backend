@@ -63,11 +63,17 @@ export const getVariableExpenses = async (req, res) => {
     /* ======================================================
        3️⃣ Agrupar gastos por lote, incluyendo nombre
     ====================================================== */
-    const groupedByLot = lots.map(lot => ({
-      lotId: lot.lot_id,
-      lotName: lot.lot_name,  // ✅ nombre del lote
-      expenses: expenses.filter(e => e.lot_id === lot.lot_id)
-    }));
+    const groupedByLot = lots.map(lot => {
+      const lotExpenses = expenses
+        .filter(e => e.lot_id === lot.lot_id)
+        .map(e => ({ ...e, lotName: lot.lot_name })); // ✅ agregamos lotName a cada gasto
+
+      return {
+        lotId: lot.lot_id,
+        lotName: lot.lot_name,
+        expenses: lotExpenses
+      };
+    });
 
     /* ======================================================
        4️⃣ Contar total de lotes para paginación
