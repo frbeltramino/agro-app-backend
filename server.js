@@ -24,6 +24,8 @@ import lotsStatsRoutes from "./src/routes/lots.stats.routes.js";
 import seedMovementsRoutes from "./src/routes/deliveries.sales.seed.js";
 import expensesTypes from "./src/routes/expenses.types.routes.js";
 import variableExpensesRoutes from "./src/routes/variable.expenses.routes.js";
+import emailRoutes from "./src/routes/email.routes.js";
+import otpRoutes from "./src/routes/otp.routes.js";
 
 
 dotenv.config();
@@ -60,6 +62,9 @@ app.use('/api/lots-stats', lotsStatsRoutes);
 
 app.use('/api/expenses/types', expensesTypes);
 app.use('/api/variable/expenses', variableExpensesRoutes);
+
+app.use('/api/email', emailRoutes);
+app.use('/api/otp', otpRoutes);
 
 
 const PORT = process.env.PORT || 3000;

@@ -27,6 +27,8 @@ DROP TABLE IF EXISTS lot_master;
 DROP TABLE IF EXISTS providers;
 
 DROP TABLE IF EXISTS expense_types;
+DROP TABLE IF EXISTS variable_expenses;
+DROP TABLE IF EXISTS otps;
 -- ============================================================
 -- TABLAS BASE
 -- ============================================================
@@ -746,3 +748,11 @@ CREATE TABLE variable_expenses (
         FOREIGN KEY (expense_type_id) REFERENCES expense_types(id)
 )
 ENGINE=InnoDB;
+
+/*Tabla OTP*/
+CREATE TABLE otps (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  otp VARCHAR(6) NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
