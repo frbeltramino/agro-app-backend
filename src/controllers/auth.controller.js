@@ -123,6 +123,12 @@ export const changePassword = async (req, res) => {
 
     const user = rows[0];
 
+    if (user.email === process.env.DEMO_EMAIL) {
+      return res.status(403).json({
+        message: "La cuenta demo no puede cambiar la contraseña",
+      });
+    }
+
     // Validar contraseña actual
     const passwordMatch = await bcrypt.compare(currentPassword, user.password);
     if (!passwordMatch) {
@@ -150,7 +156,32 @@ export const updateUserProfile = async (req, res) => {
     const { userId, name, email } = req.body;
 
     if (!userId || !name || !email) {
-      return res.status(400).json({ message: "Todos los campos son obligatorios" });
+      return res.status(400).json({
+        message: "Todos los campos son obligatorios",
+      });
+    }
+
+    // Obtener usuario actual
+    const [rows] = await pool.query(
+      "SELECT id, email FROM users WHERE id = ?",
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        message: "Usuario no encontrado",
+      });
+    }
+
+    const user = rows[0];
+
+    // 🔒 Bloqueo para cuenta demo
+    if (
+      user.email.toLowerCase() === process.env.DEMO_EMAIL?.toLowerCase()
+    ) {
+      return res.status(403).json({
+        message: "La cuenta demo no puede modificar su perfil",
+      });
     }
 
     // Verificar si el email ya está en uso por otro usuario
@@ -160,7 +191,9 @@ export const updateUserProfile = async (req, res) => {
     );
 
     if (existing.length > 0) {
-      return res.status(400).json({ message: "El email ya está en uso por otro usuario" });
+      return res.status(400).json({
+        message: "El email ya está en uso por otro usuario",
+      });
     }
 
     // Actualizar usuario
@@ -170,16 +203,20 @@ export const updateUserProfile = async (req, res) => {
     );
 
     // Obtener datos actualizados
-    const [rows] = await pool.query("SELECT id, name, email FROM users WHERE id = ?", [userId]);
-    const user = rows[0];
+    const [updatedRows] = await pool.query(
+      "SELECT id, name, email FROM users WHERE id = ?",
+      [userId]
+    );
 
     res.json({
       message: "Perfil actualizado correctamente",
-      user
+      user: updatedRows[0],
     });
 
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al actualizar perfil" });
+    res.status(500).json({
+      message: "Error al actualizar perfil",
+    });
   }
 };
