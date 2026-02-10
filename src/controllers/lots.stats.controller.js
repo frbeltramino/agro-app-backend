@@ -265,45 +265,28 @@ export const calculateLotStats = ({
 const getVariableExpenseByLots = async (pool, lotIds) => {
   if (!lotIds.length) return {};
 
-  // Obtenemos los gastos individuales
   const [rows] = await pool.query(
     `
     SELECT
       lot_id,
-      amount,
-      tons_harvested,
-      hectares
+      SUM(amount) AS total_expense,
+      SUM(amount * (tons_harvested / hectares)) AS expense_per_ha
     FROM variable_expenses
     WHERE deleted_at IS NULL
       AND tons_harvested > 0
       AND lot_id IN (?)
+    GROUP BY lot_id
     `,
     [lotIds]
   );
 
-  // Mapa para acumular por lote
+  // Convertimos a mapa por lot_id
   const map = {};
-
   rows.forEach(r => {
-    const USDxtn = r.amount;
-    const tnxha = r.tons_harvested / r.hectares;
-    const USDxha = USDxtn * tnxha;
-
-    if (!map[r.lot_id]) {
-      map[r.lot_id] = {
-        total_expense: 0,   // suma de todos los montos
-        expense_per_ha: 0,  // suma de USDxha por lote
-      };
-    }
-
-    map[r.lot_id].total_expense += USDxtn;
-    map[r.lot_id].expense_per_ha += USDxha;
-  });
-
-  // Redondeamos
-  Object.keys(map).forEach(lotId => {
-    map[lotId].total_expense = Number(map[lotId].total_expense.toFixed(2));
-    map[lotId].expense_per_ha = Number(map[lotId].expense_per_ha.toFixed(2));
+    map[r.lot_id] = {
+      total_expense: Number(r.total_expense.toFixed(2)),
+      expense_per_ha: Number(r.expense_per_ha.toFixed(2)),
+    };
   });
 
   return map;
