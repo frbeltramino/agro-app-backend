@@ -43,16 +43,26 @@ export const getLotsStats = async (req, res) => {
 
     const cropPricesMap = await getAverageSalePricePerCrop(pool, campaignId, userId);
 
-    const lotStats = lots.map(lot =>
-      calculateLotStats({
+    const variableExpensesMap = await getVariableExpenseByLots(pool, lotIds);
+
+    const lotStats = lots.map(lot => {
+      const COSTO_VARIABLE = variableExpensesMap[lot.id]?.total_expense || 0;
+
+      const stats = calculateLotStats({
         lot,
         crops,
         tasks,
         supplies,
-        defaults: DEFAULTS,
+        defaults: { ...DEFAULTS, COSTO_VARIABLE },
         cropPricesMap,
-      })
-    );
+      });
+
+      // Formateamos solo costoVariable
+      return {
+        ...stats,
+        costoVariable: Number(COSTO_VARIABLE.toFixed(2)), // ← aquí
+      };
+    });
 
     res.json({ lotes: lotStats });
 
@@ -241,3 +251,50 @@ export const calculateLotStats = ({
     margenBruto: defaults.MARGEN_BRUTO,
   };
 };
+
+const getVariableExpenseByLots = async (pool, lotIds) => {
+  if (!lotIds.length) return [];
+
+  const [rows] = await pool.query(
+    `
+    SELECT
+      lot_id,
+      SUM(amount) AS total_expense,
+      MAX(hectares) AS hectares,
+      CASE 
+        WHEN MAX(hectares) > 0 THEN SUM(amount) / MAX(hectares)
+        ELSE 0
+      END AS expense_per_ha
+    FROM variable_expenses
+    WHERE deleted_at IS NULL AND lot_id IN (?)
+    GROUP BY lot_id
+    `,
+    [lotIds]
+  );
+
+  // Devolver un mapa por lot_id para fácil lookup
+  const map = {};
+  rows.forEach(r => {
+    map[r.lot_id] = {
+      total_expense: Number(r.total_expense),
+      expense_per_ha: Number(r.expense_per_ha),
+    };
+  });
+
+  return map;
+};
+
+// SELECT
+//     ve.lot_id,
+//     MAX(ve.tons_harvested) AS total_tons,   -- solo un valor por lote
+//     MAX(ve.hectares) AS total_hectares,     -- solo un valor por lote
+//     SUM(ve.amount) AS total_expense_usd,
+//     -- gasto por hectárea
+//     CASE
+//         WHEN MAX(ve.hectares) > 0 THEN SUM(ve.amount) / MAX(ve.hectares)
+//         ELSE 0
+//     END AS expense_per_ha_usd
+// FROM variable_expenses ve
+// WHERE ve.deleted_at IS NULL
+// GROUP BY ve.lot_id
+// ORDER BY ve.lot_id;
