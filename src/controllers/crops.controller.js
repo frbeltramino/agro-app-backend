@@ -350,6 +350,39 @@ GROUP BY cr.campaign_id, cr.crop_name_id;
   }
 };
 
+export const canCreateCrop = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { lotId, campaignId } = req.params;
+    // o req.query, según cómo armes la ruta
+    if (!userId) {
+      return res.status(401).json({ message: "Usuario no autenticado" });
+    }
+
+    const [rows] = await pool.query(
+      `
+      SELECT 1
+      FROM crops
+      WHERE lot_id = ?
+        AND campaign_id = ?
+        AND status = 'active'
+        AND end_date IS NULL
+        AND real_yield IS NULL
+      LIMIT 1
+      `,
+      [lotId, campaignId]
+    );
+
+    // Si existe → NO se puede crear
+    const canCreate = rows.length === 0;
+
+    res.json({ canCreate });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Error al verificar cultivo" });
+  }
+};
+
 
 
 
