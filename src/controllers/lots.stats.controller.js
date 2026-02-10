@@ -252,49 +252,60 @@ export const calculateLotStats = ({
   };
 };
 
-const getVariableExpenseByLots = async (pool, lotIds) => {
-  if (!lotIds.length) return [];
+// necesito que se haga lo siguiente por cada registro
+// amount = USDxtn
+// tons_harvested/hectares = tnxha
+// amount x tnxha = USDxha
 
+// traducido 
+// es el monto por tonelada
+// tonleadas cosechadas dividido hectareas me da toneladas x ha
+// por último multiplico monto por tn por las tn por ha
+
+const getVariableExpenseByLots = async (pool, lotIds) => {
+  if (!lotIds.length) return {};
+
+  // Obtenemos los gastos individuales
   const [rows] = await pool.query(
     `
     SELECT
       lot_id,
-      SUM(amount) AS total_expense,
-      MAX(hectares) AS hectares,
-      CASE 
-        WHEN MAX(hectares) > 0 THEN SUM(amount) / MAX(hectares)
-        ELSE 0
-      END AS expense_per_ha
+      amount,
+      tons_harvested,
+      hectares
     FROM variable_expenses
-    WHERE deleted_at IS NULL AND lot_id IN (?)
-    GROUP BY lot_id
+    WHERE deleted_at IS NULL
+      AND tons_harvested > 0
+      AND lot_id IN (?)
     `,
     [lotIds]
   );
 
-  // Devolver un mapa por lot_id para fácil lookup
+  // Mapa para acumular por lote
   const map = {};
+
   rows.forEach(r => {
-    map[r.lot_id] = {
-      total_expense: Number(r.total_expense),
-      expense_per_ha: Number(r.expense_per_ha),
-    };
+    const USDxtn = r.amount;
+    const tnxha = r.tons_harvested / r.hectares;
+    const USDxha = USDxtn * tnxha;
+
+    if (!map[r.lot_id]) {
+      map[r.lot_id] = {
+        total_expense: 0,   // suma de todos los montos
+        expense_per_ha: 0,  // suma de USDxha por lote
+      };
+    }
+
+    map[r.lot_id].total_expense += USDxtn;
+    map[r.lot_id].expense_per_ha += USDxha;
+  });
+
+  // Redondeamos
+  Object.keys(map).forEach(lotId => {
+    map[lotId].total_expense = Number(map[lotId].total_expense.toFixed(2));
+    map[lotId].expense_per_ha = Number(map[lotId].expense_per_ha.toFixed(2));
   });
 
   return map;
 };
 
-// SELECT
-//     ve.lot_id,
-//     MAX(ve.tons_harvested) AS total_tons,   -- solo un valor por lote
-//     MAX(ve.hectares) AS total_hectares,     -- solo un valor por lote
-//     SUM(ve.amount) AS total_expense_usd,
-//     -- gasto por hectárea
-//     CASE
-//         WHEN MAX(ve.hectares) > 0 THEN SUM(ve.amount) / MAX(ve.hectares)
-//         ELSE 0
-//     END AS expense_per_ha_usd
-// FROM variable_expenses ve
-// WHERE ve.deleted_at IS NULL
-// GROUP BY ve.lot_id
-// ORDER BY ve.lot_id;
