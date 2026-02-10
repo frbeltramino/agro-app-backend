@@ -756,3 +756,13 @@ CREATE TABLE otps (
   otp VARCHAR(6) NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+/*10/02/2026*/
+
+ALTER TABLE lot_master
+  ADD COLUMN userId INT NULL AFTER id,
+  ADD CONSTRAINT fk_lot_master_user
+    FOREIGN KEY (userId)
+    REFERENCES users(id)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE;

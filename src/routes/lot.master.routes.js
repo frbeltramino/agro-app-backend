@@ -4,7 +4,11 @@ import { authorizeRoles, validateJWT } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/", getLotMasters);
+router.get("/",
+  validateJWT,
+  getLotMasters,
+
+);
 router.post("/new",
   validateJWT,
   authorizeRoles("admin"),
