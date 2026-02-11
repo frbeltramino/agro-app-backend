@@ -46,7 +46,7 @@ export const getLotsStats = async (req, res) => {
     const variableExpensesMap = await getVariableExpenseByLots(pool, lotIds);
 
     const lotStats = lots.map(lot => {
-      const COSTO_VARIABLE = variableExpensesMap[lot.id]?.total_expense || 0;
+      const COSTO_VARIABLE = variableExpensesMap[lot.id]?.expense_per_ha || 0;
 
       const stats = calculateLotStats({
         lot,
