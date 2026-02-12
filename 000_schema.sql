@@ -766,3 +766,18 @@ ALTER TABLE lot_master
     REFERENCES users(id)
     ON UPDATE CASCADE
     ON DELETE CASCADE;
+
+
+/*12/02/2026*/
+
+ALTER TABLE `tasks`
+ADD COLUMN `user_id` INT NULL DEFAULT NULL AFTER `id`,
+ADD INDEX `idx_tasks_user_id` (`user_id`),
+ADD CONSTRAINT `fk_tasks_user`
+    FOREIGN KEY (`user_id`)
+    REFERENCES `users` (`id`)
+    ON UPDATE CASCADE
+    ON DELETE SET NULL;
+
+    ALTER TABLE `tasks`
+MODIFY COLUMN `user_id` INT NOT NULL;
