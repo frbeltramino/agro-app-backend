@@ -73,11 +73,11 @@ export const getTasksByCropId = async (req, res) => {
         t.laborCost,
         t.date,
         t.status,
+        t.note,  
         t.created_at,
         t.updated_at,
 
         ct.performed_at,
-        ct.note,
 
         tt.name AS type,
 
@@ -179,6 +179,13 @@ export const getTasksByCropId = async (req, res) => {
 // =========================
 export const createOrUpdateTask = async (req, res) => {
   const connection = await pool.getConnection();
+
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ message: "No autorizado" });
+  }
+
   try {
     const { id } = req.params;
     const {
@@ -199,7 +206,7 @@ export const createOrUpdateTask = async (req, res) => {
     if (provider_id) {
       const [[provider]] = await connection.query(
         `SELECT id FROM providers WHERE id = ? AND userId = ?`,
-        [provider_id, req.user.id]
+        [provider_id, userId]
       );
 
       if (!provider) {
@@ -245,10 +252,10 @@ export const createOrUpdateTask = async (req, res) => {
     // 2) UPDATE
     // ===============================
     if (id) {
-      await connection.query(
+      const [updateResult] = await connection.query(
         `UPDATE tasks 
-        SET task_type_id = ?, provider_id = ?, description = ?, total_price = ?, laborCost = ?, date = ?
-        WHERE id = ?`,
+   SET task_type_id = ?, provider_id = ?, description = ?, total_price = ?, laborCost = ?, date = ?, note = ?
+   WHERE id = ? AND user_id = ?`,
         [
           task_type_id,
           provider_id || null,
@@ -256,21 +263,32 @@ export const createOrUpdateTask = async (req, res) => {
           total_price,
           laborCost,
           performed_at,
+          note || null,  // <-- aquí agregamos la nota
           id,
+          userId
         ]
       );
 
+      // 🔐 Validar permiso
+      if (updateResult.affectedRows === 0) {
+        await connection.rollback();
+        return res.status(403).json({
+          message: "No tienes permiso para modificar esta tarea"
+        });
+      }
+
       taskId = id;
 
-      await connection.query(`DELETE FROM task_supplies WHERE task_id = ?`, [
-        taskId,
-      ]);
+      await connection.query(
+        `DELETE FROM task_supplies WHERE task_id = ?`,
+        [taskId]
+      );
 
       await connection.query(
         `UPDATE crop_tasks 
-         SET performed_at = ?, note = ? 
-         WHERE task_id = ?`,
-        [performed_at, note || null, taskId]
+   SET performed_at = ?, note = ? 
+   WHERE task_id = ?`,
+        [performed_at, null, taskId]
       );
 
       // ===============================
@@ -279,9 +297,10 @@ export const createOrUpdateTask = async (req, res) => {
     } else {
       const [taskResult] = await connection.query(
         `INSERT INTO tasks 
-          (crop_id, task_type_id, provider_id, description, total_price, laborCost, date)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+   (user_id, crop_id, task_type_id, provider_id, description, total_price, laborCost, date, note)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
+          userId,
           crop_id,
           task_type_id,
           provider_id || null,
@@ -289,6 +308,7 @@ export const createOrUpdateTask = async (req, res) => {
           total_price,
           laborCost,
           performed_at,
+          note || null,  // <-- aquí agregamos la nota
         ]
       );
 
