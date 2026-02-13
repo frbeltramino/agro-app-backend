@@ -781,3 +781,13 @@ ADD CONSTRAINT `fk_tasks_user`
 
     ALTER TABLE `tasks`
 MODIFY COLUMN `user_id` INT NOT NULL;
+
+
+ALTER TABLE variable_expenses
+ADD COLUMN crop_id INT NULL AFTER lot_id,
+ADD INDEX idx_variable_expenses_crop (crop_id),
+ADD CONSTRAINT fk_variable_expenses_crop
+  FOREIGN KEY (crop_id)
+  REFERENCES crops(id)
+  ON UPDATE CASCADE
+  ON DELETE RESTRICT;
