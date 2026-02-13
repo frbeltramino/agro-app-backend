@@ -45,15 +45,22 @@ export const getVariableExpenses = async (req, res) => {
     if (lotIds.length > 0) {
       const [rows] = await pool.query(
         `
-        SELECT 
-          ve.*,
-          et.name AS expense_type_name
-        FROM variable_expenses ve
-        LEFT JOIN expense_types et ON ve.expense_type_id = et.id
-        WHERE ve.user_id = ?
-          AND ve.deleted_at IS NULL
-          AND ve.lot_id IN (?)
-        ORDER BY ve.lot_id ASC, ve.expense_date DESC
+       SELECT 
+  ve.*,
+  et.name AS expense_type_name,
+  c.id AS crop_id,
+  cn.name AS crop_name
+FROM variable_expenses ve
+LEFT JOIN expense_types et 
+  ON ve.expense_type_id = et.id
+LEFT JOIN crops c 
+  ON ve.crop_id = c.id
+LEFT JOIN crop_name cn 
+  ON c.crop_name_id = cn.id
+WHERE ve.user_id = ?
+  AND ve.deleted_at IS NULL
+  AND ve.lot_id IN (?)
+ORDER BY ve.lot_id ASC, ve.expense_date DESC
         `,
         [userId, lotIds]
       );
@@ -127,6 +134,7 @@ export const createOrUpdateVariableExpense = async (req, res) => {
       id,
       campaign_id,
       lot_id,
+      crop_id,
       hectares,
       tons_harvested,
       expense_type_id,
@@ -136,9 +144,34 @@ export const createOrUpdateVariableExpense = async (req, res) => {
     } = req.body;
 
     // Validaciones mínimas
-    if (!campaign_id || !lot_id || !hectares || !expense_type_id || !expense_date || !amount) {
+    if (
+      !campaign_id ||
+      !lot_id ||
+      !crop_id ||
+      expense_type_id == null ||
+      !expense_date ||
+      amount == null
+    ) {
       return res.status(400).json({
         message: "Faltan campos obligatorios"
+      });
+    }
+
+    const [cropCheck] = await pool.query(
+      `
+  SELECT id
+  FROM crops
+  WHERE id = ?
+    AND lot_id = ?
+    AND campaign_id = ?
+    AND userId = ?
+  `,
+      [crop_id, lot_id, campaign_id, userId]
+    );
+
+    if (cropCheck.length === 0) {
+      return res.status(400).json({
+        message: "El cultivo no pertenece a ese lote o campaña"
       });
     }
 
@@ -152,6 +185,7 @@ export const createOrUpdateVariableExpense = async (req, res) => {
         SET
           campaign_id = ?,
           lot_id = ?,
+            crop_id = ?,  
           hectares = ?,
           tons_harvested = ?,
           expense_type_id = ?,
@@ -165,6 +199,7 @@ export const createOrUpdateVariableExpense = async (req, res) => {
         [
           campaign_id,
           lot_id,
+          crop_id,
           hectares,
           tons_harvested || null,
           expense_type_id,
@@ -190,24 +225,26 @@ export const createOrUpdateVariableExpense = async (req, res) => {
     // ==========================
     const [result] = await pool.query(
       `
-      INSERT INTO variable_expenses
-      (
-        user_id,
-        campaign_id,
-        lot_id,
-        hectares,
-        tons_harvested,
-        expense_type_id,
-        provider,
-        expense_date,
-        amount
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO variable_expenses
+(
+  user_id,
+  campaign_id,
+  lot_id,
+  crop_id, 
+  hectares,
+  tons_harvested,
+  expense_type_id,
+  provider,
+  expense_date,
+  amount
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         userId,
         campaign_id,
         lot_id,
+        crop_id,
         hectares,
         tons_harvested || null,
         expense_type_id,
