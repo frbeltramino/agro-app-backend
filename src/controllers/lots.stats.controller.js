@@ -43,24 +43,29 @@ export const getLotsStats = async (req, res) => {
 
     const cropPricesMap = await getAverageSalePricePerCrop(pool, campaignId, userId);
 
-    const variableExpensesMap = await getVariableExpenseByLots(pool, lotIds);
+    const variableExpensesMap = await getVariableExpenseByCrops(pool, cropIds);
 
     const lotStats = lots.map(lot => {
-      const COSTO_VARIABLE = variableExpensesMap[lot.id]?.expense_per_ha || 0;
 
-      const stats = calculateLotStats({
-        lot,
-        crops,
-        tasks,
-        supplies,
-        defaults: { ...DEFAULTS, COSTO_VARIABLE },
-        cropPricesMap,
-      });
+      const cropsInLot = crops.filter(c => c.lot_id === lot.id);
 
-      // Formateamos solo costoVariable
+      const cultivos = cropsInLot.map(crop =>
+        calculateCropStats({
+          lot,
+          crop,
+          tasks,
+          supplies,
+          defaults: DEFAULTS,
+          cropPricesMap,
+          variableExpensesMap,
+        })
+      );
+
       return {
-        ...stats,
-        costoVariable: Number(COSTO_VARIABLE.toFixed(2)), // ← aquí
+        id: lot.id,
+        lote: lot.name,
+        superficieHa: Number(lot.hectares.toFixed(2)),
+        cultivos,
       };
     });
 
@@ -71,6 +76,90 @@ export const getLotsStats = async (req, res) => {
     res.status(500).json({ message: "Error al obtener estadísticas de lotes" });
   }
 };
+
+export const calculateCropStats = ({
+  lot,
+  crop,
+  tasks,
+  supplies,
+  defaults,
+  cropPricesMap,
+  variableExpensesMap,
+}) => {
+
+  const HARVEST_TASK_TYPE_ID = 5;
+  const SEED_CATEGORY_ID = 5;
+
+  const tasksOfCrop = tasks.filter(t => t.crop_id === crop.id);
+
+  let cosechaLaboresTotal = 0;
+  let otrasLaboresTotal = 0;
+
+  tasksOfCrop.forEach(t => {
+    const costo = t.laborCost || 0;
+    if (Number(t.task_type_id) === HARVEST_TASK_TYPE_ID) {
+      cosechaLaboresTotal += costo;
+    } else {
+      otrasLaboresTotal += costo;
+    }
+  });
+
+  const laboresTotal = cosechaLaboresTotal + otrasLaboresTotal;
+
+  // Supplies
+  const taskIds = new Set(tasksOfCrop.map(t => t.id));
+  const suppliesOfCrop = supplies.filter(s => taskIds.has(s.task_id));
+
+  let semillasTotal = 0;
+  let otrosInsumosTotal = 0;
+
+  suppliesOfCrop.forEach(s => {
+    const costo = (s.total_used || 0) * (s.price_per_unit || 0);
+    if (s.category_id === SEED_CATEGORY_ID) {
+      semillasTotal += costo;
+    } else {
+      otrosInsumosTotal += costo;
+    }
+  });
+
+  const insumosTotal = semillasTotal + otrosInsumosTotal;
+
+  // 🔹 Ingresos con precio ponderado
+  const cosecha = crop.real_yield || 0;
+  const precioPromedioPonderado = cropPricesMap[crop.crop_name_id] || 0;
+  const ingresos = cosecha * precioPromedioPonderado;
+
+  // 🔹 Costo variable por hectárea
+  const costoVariable = variableExpensesMap[crop.id]?.expense_per_ha || 0;
+
+  const margenBruto = ingresos - insumosTotal - laboresTotal - costoVariable;
+
+  return {
+    cropId: crop.id,
+    cropName: crop.crop_name,
+    lotId: lot.id,
+
+    cosecha: Number(cosecha.toFixed(2)),
+    ingresos: Number(ingresos.toFixed(2)),
+
+    // Insumos
+    semillas: Number(semillasTotal.toFixed(2)),
+    insumosSinSemillas: Number(otrosInsumosTotal.toFixed(2)),
+    insumos: Number(insumosTotal.toFixed(2)),
+
+    // Labores
+    cosechaLabores: Number(cosechaLaboresTotal.toFixed(2)),
+    otrasLabores: Number(otrasLaboresTotal.toFixed(2)),
+    labores: Number(laboresTotal.toFixed(2)),
+
+    costoVariable: Number(costoVariable.toFixed(2)),
+    margenBruto: Number(margenBruto.toFixed(2)),
+
+    // 🔹 Precio promedio ponderado
+    precioPromedioPonderado: Number(precioPromedioPonderado.toFixed(2)),
+  };
+};
+
 
 
 export const getLotsByCampaign = async (pool, campaignId) => {
@@ -85,13 +174,25 @@ export const getLotsByCampaign = async (pool, campaignId) => {
 
 export const getActiveCropsByLots = async (pool, lotIds, userId) => {
   const [rows] = await pool.query(
-    `SELECT id, lot_id, crop_name_id, real_yield
-     FROM crops
-     WHERE lot_id IN (?) AND userId = ? AND status = 'active'`,
+    `
+    SELECT 
+      c.id,
+      c.lot_id,
+      c.crop_name_id,
+      cn.name AS crop_name,
+      c.real_yield
+    FROM crops c
+    INNER JOIN crop_name cn 
+      ON cn.id = c.crop_name_id
+    WHERE c.lot_id IN (?) 
+      AND c.userId = ?
+      AND c.status = 'active'
+    `,
     [lotIds, userId]
   );
+
   return rows;
-}
+};
 
 export const getCropTasks = async (pool, cropIds) => {
   const [rows] = await pool.query(
@@ -105,8 +206,8 @@ export const getCropTasks = async (pool, cropIds) => {
 
 export const getTasks = async (pool, taskIds) => {
   const [rows] = await pool.query(
-    `SELECT id, crop_id, laborCost
-     FROM tasks 
+    `SELECT id, crop_id, laborCost, task_type_id
+     FROM tasks
      WHERE id IN (?) AND status = 'active'`,
     [taskIds]
   );
@@ -168,90 +269,6 @@ export const getAverageSalePricePerCrop = async (pool, campaignId, userId) => {
 };
 
 
-export const calculateLotStats = ({
-  lot,
-  crops,
-  tasks,
-  supplies,
-  defaults,
-  cropPricesMap,
-}) => {
-  const cropsInLot = crops.filter(c => c.lot_id === lot.id);
-  const tasksInLot = tasks.filter(t =>
-    cropsInLot.some(c => c.id === t.crop_id)
-  );
-  const suppliesInLot = supplies.filter(s =>
-    tasksInLot.some(t => t.id === s.task_id)
-  );
-
-  const insumosPorCategoriaMap = suppliesInLot.reduce((acc, s) => {
-    const categoria = s.category_name || "Sin categoría";
-    const costo = (s.total_used || 0) * (s.price_per_unit || 0);
-
-    if (!acc[categoria]) {
-      acc[categoria] = 0;
-    }
-
-    acc[categoria] += costo;
-
-    return acc;
-  }, {});
-
-  const labores = tasksInLot.reduce(
-    (sum, t) => sum + (t.laborCost || 0),
-    0
-  );
-
-  const insumosPorCategoria = Object.entries(insumosPorCategoriaMap).map(
-    ([categoria, total]) => ({
-      categoria,
-      total: Number(total.toFixed(2)),
-    })
-  );
-
-  const insumosTotal = insumosPorCategoria.reduce(
-    (sum, i) => sum + i.total,
-    0
-  );
-
-  const cosecha = cropsInLot.reduce(
-    (sum, c) => sum + (c.real_yield || 0),
-    0
-  );
-
-  const ingresos = cropsInLot.reduce((sum, c) => {
-    const precio = cropPricesMap[c.crop_name_id] || defaults.PRECIO_POR_UNIDAD;
-    return sum + (c.real_yield || 0) * precio;
-  }, 0);
-
-  const preciosDelLote = cropsInLot
-    .map(c => {
-      if (!c.crop_name_id) return null;
-      return cropPricesMap[c.crop_name_id];
-    })
-    .filter(p => typeof p === "number");
-
-  const precioPromedio = preciosDelLote.length
-    ? preciosDelLote.reduce((a, b) => a + b, 0) / preciosDelLote.length
-    : defaults.PRECIO_POR_UNIDAD;
-
-  return {
-    id: lot.id,
-    lote: lot.name,
-    superficieHa: Number(lot.hectares.toFixed(2)),
-
-    insumos: Number(insumosTotal.toFixed(2)),
-    insumosPorCategoria, // 👈 array siempre
-
-    labores: Number(labores.toFixed(2)),
-    cosecha: Number(cosecha.toFixed(2)),
-    ingresos: Number(ingresos.toFixed(2)),
-    precioPromedio: Number(precioPromedio.toFixed(2)),
-    costoVariable: defaults.COSTO_VARIABLE,
-    margenBruto: defaults.MARGEN_BRUTO,
-  };
-};
-
 // necesito que se haga lo siguiente por cada registro
 // amount = USDxtn
 // tons_harvested/hectares = tnxha
@@ -262,28 +279,27 @@ export const calculateLotStats = ({
 // tonleadas cosechadas dividido hectareas me da toneladas x ha
 // por último multiplico monto por tn por las tn por ha
 
-const getVariableExpenseByLots = async (pool, lotIds) => {
-  if (!lotIds.length) return {};
+const getVariableExpenseByCrops = async (pool, cropIds) => {
+  if (!cropIds.length) return {};
 
   const [rows] = await pool.query(
     `
     SELECT
-      lot_id,
+      crop_id,
       SUM(amount) AS total_expense,
       SUM(amount * (tons_harvested / hectares)) AS expense_per_ha
     FROM variable_expenses
     WHERE deleted_at IS NULL
       AND tons_harvested > 0
-      AND lot_id IN (?)
-    GROUP BY lot_id
+      AND crop_id IN (?)
+    GROUP BY crop_id
     `,
-    [lotIds]
+    [cropIds]
   );
 
-  // Convertimos a mapa por lot_id
   const map = {};
   rows.forEach(r => {
-    map[r.lot_id] = {
+    map[r.crop_id] = {
       total_expense: Number(r.total_expense.toFixed(2)),
       expense_per_ha: Number(r.expense_per_ha.toFixed(2)),
     };
