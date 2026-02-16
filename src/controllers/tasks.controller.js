@@ -254,8 +254,8 @@ export const createOrUpdateTask = async (req, res) => {
     if (id) {
       const [updateResult] = await connection.query(
         `UPDATE tasks 
-   SET task_type_id = ?, provider_id = ?, description = ?, total_price = ?, laborCost = ?, date = ?, note = ?
-   WHERE id = ? AND user_id = ?`,
+     SET task_type_id = ?, provider_id = ?, description = ?, total_price = ?, laborCost = ?, date = ?, note = ?, user_id = ?
+     WHERE id = ?`,
         [
           task_type_id,
           provider_id || null,
@@ -263,37 +263,19 @@ export const createOrUpdateTask = async (req, res) => {
           total_price,
           laborCost,
           performed_at,
-          note || null,  // <-- aquí agregamos la nota
-          id,
-          userId
+          note || null,
+          userId,  // actualizamos el user_id
+          id
         ]
       );
 
-      // 🔐 Validar permiso
       if (updateResult.affectedRows === 0) {
         await connection.rollback();
-        return res.status(403).json({
-          message: "No tienes permiso para modificar esta tarea"
+        return res.status(404).json({
+          message: "Tarea no encontrada o no se pudo actualizar"
         });
       }
-
       taskId = id;
-
-      await connection.query(
-        `DELETE FROM task_supplies WHERE task_id = ?`,
-        [taskId]
-      );
-
-      await connection.query(
-        `UPDATE crop_tasks 
-   SET performed_at = ?, note = ? 
-   WHERE task_id = ?`,
-        [performed_at, null, taskId]
-      );
-
-      // ===============================
-      // 3) CREATE
-      // ===============================
     } else {
       const [taskResult] = await connection.query(
         `INSERT INTO tasks 

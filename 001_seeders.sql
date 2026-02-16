@@ -22,8 +22,11 @@ INSERT INTO supply_category (name) VALUES
 INSERT INTO task_types (name)
 VALUES
 ('Siembra'),
-('Fumigación'),
+('Fertilización'),
+('Pulverización'),
 ('Fungicida');
+('Cosecha');
+('Labranza');
 
 INSERT INTO lot_master (name, default_surface)
 VALUES
