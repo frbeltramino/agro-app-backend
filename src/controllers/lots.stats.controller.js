@@ -5,7 +5,7 @@ import {
 } from "../utils/lotsStats.utils.js";
 
 
-const DEFAULTS = {
+export const DEFAULTS = {
   PRECIO_POR_UNIDAD: 0,
   COSTO_VARIABLE: 0,
   MARGEN_BRUTO: 0,
@@ -279,7 +279,7 @@ export const getAverageSalePricePerCrop = async (pool, campaignId, userId) => {
 // tonleadas cosechadas dividido hectareas me da toneladas x ha
 // por último multiplico monto por tn por las tn por ha
 
-const getVariableExpenseByCrops = async (pool, cropIds) => {
+export const getVariableExpenseByCrops = async (pool, cropIds) => {
   if (!cropIds.length) return {};
 
   const [rows] = await pool.query(

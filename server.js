@@ -26,6 +26,7 @@ import expensesTypes from "./src/routes/expenses.types.routes.js";
 import variableExpensesRoutes from "./src/routes/variable.expenses.routes.js";
 import emailRoutes from "./src/routes/email.routes.js";
 import otpRoutes from "./src/routes/otp.routes.js";
+import pdfRoutes from "./src/routes/pdf.routes.js";
 
 
 dotenv.config();
@@ -65,6 +66,8 @@ app.use('/api/variable/expenses', variableExpensesRoutes);
 
 app.use('/api/email', emailRoutes);
 app.use('/api/otp', otpRoutes);
+
+app.use('/api/pdf', pdfRoutes);
 
 
 const PORT = process.env.PORT || 3000;
