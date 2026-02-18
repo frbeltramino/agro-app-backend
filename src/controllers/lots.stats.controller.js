@@ -271,13 +271,11 @@ export const getAverageSalePricePerCrop = async (pool, campaignId, userId) => {
 
 // necesito que se haga lo siguiente por cada registro
 // amount = USDxtn
-// tons_harvested/hectares = tnxha
 // amount x tnxha = USDxha
-
+// USDxha | hectares
 // traducido 
-// es el monto por tonelada
-// tonleadas cosechadas dividido hectareas me da toneladas x ha
-// por último multiplico monto por tn por las tn por ha
+// es el monto por tonelada X las toneladas cosechadas dividido las hectareas del lote
+// 
 
 const getVariableExpenseByCrops = async (pool, cropIds) => {
   if (!cropIds.length) return {};
@@ -287,10 +285,11 @@ const getVariableExpenseByCrops = async (pool, cropIds) => {
     SELECT
       crop_id,
       SUM(amount) AS total_expense,
-      SUM(amount * (tons_harvested / hectares)) AS expense_per_ha
+      (SUM(amount) * SUM(tons_harvested)) / SUM(hectares) AS expense_per_ha
     FROM variable_expenses
     WHERE deleted_at IS NULL
       AND tons_harvested > 0
+      AND hectares > 0
       AND crop_id IN (?)
     GROUP BY crop_id
     `,
@@ -300,8 +299,8 @@ const getVariableExpenseByCrops = async (pool, cropIds) => {
   const map = {};
   rows.forEach(r => {
     map[r.crop_id] = {
-      total_expense: Number(r.total_expense.toFixed(2)),
-      expense_per_ha: Number(r.expense_per_ha.toFixed(2)),
+      total_expense: Number((r.total_expense || 0).toFixed(2)),
+      expense_per_ha: Number((r.expense_per_ha || 0).toFixed(2)),
     };
   });
 
