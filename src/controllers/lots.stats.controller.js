@@ -132,7 +132,8 @@ export const calculateCropStats = ({
   // 🔹 Costo variable por hectárea
   const costoVariable = variableExpensesMap[crop.id]?.expense_per_ha || 0;
 
-  const margenBruto = ingresos - insumosTotal - laboresTotal - costoVariable;
+
+  const margenBruto = ingresos - insumosTotal - laboresTotal - (costoVariable * lot.hectares);
 
   return {
     cropId: crop.id,
