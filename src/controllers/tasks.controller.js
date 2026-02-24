@@ -63,33 +63,35 @@ export const getTasksByCropId = async (req, res) => {
     // =========================
     const [tasks] = await pool.query(
       `
-      SELECT
-        t.id,
-        t.crop_id,
-        t.task_type_id,
-        t.provider_id,
-        t.description,
-        t.total_price,
-        t.laborCost,
-        t.date,
-        t.status,
-        t.note,  
-        t.created_at,
-        t.updated_at,
+  SELECT
+    t.id,
+    t.crop_id,
+    t.task_type_id,
+    t.provider_id,
+    t.description,
+    t.total_price,
+    t.laborCost,
+    t.hectares,
+    t.labor_cost_per_hectare,
+    t.date,
+    t.status,
+    t.note,  
+    t.created_at,
+    t.updated_at,
 
-        ct.performed_at,
+    ct.performed_at,
 
-        tt.name AS type,
+    tt.name AS type,
 
-        p.name AS provider_name
-      FROM tasks t
-      LEFT JOIN crop_tasks ct ON ct.task_id = t.id
-      LEFT JOIN task_types tt ON tt.id = t.task_type_id
-      LEFT JOIN providers p ON p.id = t.provider_id
-      ${whereClause}
-      ORDER BY t.date ASC, t.created_at ASC
-      LIMIT ? OFFSET ?
-      `,
+    p.name AS provider_name
+  FROM tasks t
+  LEFT JOIN crop_tasks ct ON ct.task_id = t.id
+  LEFT JOIN task_types tt ON tt.id = t.task_type_id
+  LEFT JOIN providers p ON p.id = t.provider_id
+  ${whereClause}
+  ORDER BY t.date ASC, t.created_at ASC
+  LIMIT ? OFFSET ?
+  `,
       [...params, limitNum, offset]
     );
 
@@ -196,6 +198,8 @@ export const createOrUpdateTask = async (req, res) => {
       performed_at,
       note,
       laborCost = 0,
+      hectares = null,
+      labor_cost_per_hectare = null,
       supplies = [],
     } = req.body;
 
@@ -254,17 +258,28 @@ export const createOrUpdateTask = async (req, res) => {
     if (id) {
       const [updateResult] = await connection.query(
         `UPDATE tasks 
-     SET task_type_id = ?, provider_id = ?, description = ?, total_price = ?, laborCost = ?, date = ?, note = ?, user_id = ?
-     WHERE id = ?`,
+   SET task_type_id = ?, 
+       provider_id = ?, 
+       description = ?, 
+       total_price = ?, 
+       laborCost = ?, 
+       hectares = ?, 
+       labor_cost_per_hectare = ?, 
+       date = ?, 
+       note = ?, 
+       user_id = ?
+   WHERE id = ?`,
         [
           task_type_id,
           provider_id || null,
           description,
           total_price,
           laborCost,
+          hectares,
+          labor_cost_per_hectare,
           performed_at,
           note || null,
-          userId,  // actualizamos el user_id
+          userId,
           id
         ]
       );
@@ -279,8 +294,8 @@ export const createOrUpdateTask = async (req, res) => {
     } else {
       const [taskResult] = await connection.query(
         `INSERT INTO tasks 
-   (user_id, crop_id, task_type_id, provider_id, description, total_price, laborCost, date, note)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+   (user_id, crop_id, task_type_id, provider_id, description, total_price, laborCost, hectares, labor_cost_per_hectare, date, note)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userId,
           crop_id,
@@ -289,8 +304,10 @@ export const createOrUpdateTask = async (req, res) => {
           description,
           total_price,
           laborCost,
+          hectares,
+          labor_cost_per_hectare,
           performed_at,
-          note || null,  // <-- aquí agregamos la nota
+          note || null,
         ]
       );
 
@@ -338,6 +355,8 @@ export const createOrUpdateTask = async (req, res) => {
       task_id: taskId,
       total_price,
       laborCost,
+      hectares,
+      labor_cost_per_hectare,
     });
 
   } catch (err) {
