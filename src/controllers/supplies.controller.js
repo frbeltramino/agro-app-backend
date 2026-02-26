@@ -431,10 +431,16 @@ export const checkSupplyUsage = async (req, res) => {
     if (supply_id) {
       // Supply normal → solo revisar task_supplies
       const [rows] = await pool.query(
-        `SELECT ts.id, ts.task_id, t.description AS task_description, ts.total_used
-         FROM task_supplies ts
-         INNER JOIN tasks t ON ts.task_id = t.id
-         WHERE ts.supply_id = ? AND ts.task_id IN (?)`,
+        `SELECT 
+      ts.id, 
+      ts.task_id, 
+      t.description AS task_description, 
+      tt.name AS task_type_name,
+      ts.total_used
+   FROM task_supplies ts
+   INNER JOIN tasks t ON ts.task_id = t.id
+   INNER JOIN task_types tt ON t.task_type_id = tt.id
+   WHERE ts.supply_id = ? AND ts.task_id IN (?)`,
         [supply_id, taskIds]
       );
       usageRows = rows;
@@ -443,10 +449,16 @@ export const checkSupplyUsage = async (req, res) => {
     if (stock_id) {
       // Stock → solo considerar los que están relacionados con tareas
       const [rows] = await pool.query(
-        `SELECT ts.id, ts.task_id, t.description AS task_description, ts.total_used
-         FROM task_supplies ts
-         INNER JOIN tasks t ON ts.task_id = t.id
-         WHERE ts.stock_id = ? AND ts.task_id IN (?)`,
+        `SELECT 
+      ts.id, 
+      ts.task_id, 
+      t.description AS task_description, 
+      tt.name AS task_type_name,
+      ts.total_used
+   FROM task_supplies ts
+   INNER JOIN tasks t ON ts.task_id = t.id
+   INNER JOIN task_types tt ON t.task_type_id = tt.id
+   WHERE ts.stock_id = ? AND ts.task_id IN (?)`,
         [stock_id, taskIds]
       );
       usageRows = rows;
