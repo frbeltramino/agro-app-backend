@@ -321,25 +321,51 @@ export const createOrUpdateTask = async (req, res) => {
     }
 
     // ===============================
-    // 4) Insertar task_supplies
+    // 4) Sincronizar task_supplies
     // ===============================
+
+    // Primero, obtener arrays de ids que vienen del request
+    const purchaseIds = supplies.filter(s => s.supply_id).map(s => s.supply_id);
+    const stockIds = supplies.filter(s => s.stock_id).map(s => s.stock_id);
+
+    // DELETE de insumos que ya no vienen en el request
+    await connection.query(
+      `DELETE FROM task_supplies
+   WHERE task_id = ?
+     AND (
+       (supply_id IS NOT NULL AND supply_id NOT IN (?))
+       OR
+       (stock_id IS NOT NULL AND stock_id NOT IN (?))
+     )`,
+      [taskId, purchaseIds.length > 0 ? purchaseIds : [0], stockIds.length > 0 ? stockIds : [0]]
+    );
+
+    // Insertar o actualizar insumos que vienen del request
     for (const s of supplies) {
+      const [existing] = await connection.query(
+        `SELECT id FROM task_supplies WHERE task_id = ? AND supply_id <=> ? AND stock_id <=> ?`,
+        [taskId, s.supply_id, s.stock_id]
+      );
+
       const total_used = s.dose_per_ha * s.hectares;
 
-      await connection.query(
-        `INSERT INTO task_supplies 
-      (task_id, supply_id, stock_id, dose_per_ha, hectares, total_used, price_per_unit)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          taskId,
-          s.supply_id || null,
-          s.stock_id || null,
-          s.dose_per_ha,
-          s.hectares,
-          total_used,
-          s.price_per_unit ?? 0,
-        ]
-      );
+      if (existing.length > 0) {
+        // Actualiza si ya existe
+        await connection.query(
+          `UPDATE task_supplies
+       SET dose_per_ha = ?, hectares = ?, total_used = ?, price_per_unit = ?
+       WHERE id = ?`,
+          [s.dose_per_ha, s.hectares, total_used, s.price_per_unit ?? 0, existing[0].id]
+        );
+      } else {
+        // Inserta si no existe
+        await connection.query(
+          `INSERT INTO task_supplies
+       (task_id, supply_id, stock_id, dose_per_ha, hectares, total_used, price_per_unit)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [taskId, s.supply_id || null, s.stock_id || null, s.dose_per_ha, s.hectares, total_used, s.price_per_unit ?? 0]
+        );
+      }
     }
 
 

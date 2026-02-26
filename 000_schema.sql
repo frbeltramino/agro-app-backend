@@ -791,3 +791,15 @@ ADD CONSTRAINT fk_variable_expenses_crop
   REFERENCES crops(id)
   ON UPDATE CASCADE
   ON DELETE RESTRICT;
+
+
+ALTER TABLE task_supplies ADD UNIQUE KEY uq_task_supply_stock (task_id, stock_id);
+ ALTER TABLE task_supplies ADD UNIQUE KEY uq_task_supply_supply (task_id, supply_id);
+
+ ALTER TABLE task_supplies
+ADD CONSTRAINT chk_one_source
+CHECK (
+  (stock_id IS NOT NULL AND supply_id IS NULL)
+  OR
+  (stock_id IS NULL AND supply_id IS NOT NULL)
+);
